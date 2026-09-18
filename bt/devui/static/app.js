@@ -125,6 +125,12 @@ class Cap extends AudioWorkletProcessor {
 registerProcessor("cap", Cap);`;
 
 async function startMic() {
+	if (!navigator.mediaDevices?.getUserMedia) {
+		throw new Error(
+			"mic access needs a secure context (https, or localhost) — " +
+			"over Tailscale run `tailscale serve https / http://127.0.0.1:8080`",
+		);
+	}
 	micStream = await navigator.mediaDevices.getUserMedia({
 		audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
 	});
