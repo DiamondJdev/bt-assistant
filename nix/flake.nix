@@ -25,6 +25,7 @@
           ];
 
           shellHook = ''
+            unset PYTHONPATH
             echo "BT dev shell. Run 'uv sync' once, then 'uv run bt' to start."
             echo "Ollama must be running separately (nixos: services.ollama.enable)."
           '';
