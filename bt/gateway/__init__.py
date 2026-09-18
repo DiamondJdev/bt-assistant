@@ -1,0 +1,1 @@
+# FastAPI Module to serve the assistant over web
