@@ -20,8 +20,8 @@ dependencies = [
 ]
 
 [project.scripts]
-bt = "bt.main:run" # prod
-bt-dev = "bt.dev_entry:run" # dev
+bt = "bt.main:run" # prod, port 8080
+bt-dev = "bt.dev_entry:run" # dev, port 8081
 
 [dependency-groups]
 dev = ["pytest>=8.0"]
