@@ -26,6 +26,16 @@
 
           shellHook = ''
             unset PYTHONPATH
+            # numpy, onnxruntime and friends ship prebuilt wheels linked against the
+            # system C++/zlib/audio libs, which a nix shell does not expose by default.
+            export LD_LIBRARY_PATH="${
+              pkgs.lib.makeLibraryPath [
+                pkgs.stdenv.cc.cc.lib
+                pkgs.zlib
+                pkgs.portaudio
+                pkgs.libsndfile
+              ]
+            }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
             echo "BT dev shell. Run 'uv sync' once, then 'uv run bt' to start."
             echo "Ollama must be running separately (nixos: services.ollama.enable)."
           '';

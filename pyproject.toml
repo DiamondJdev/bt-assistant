@@ -15,6 +15,7 @@ dependencies = [
     "numpy>=1.26",
     "openwakeword>=0.6",
     "openai>=3.15.0",
+    "pipecat-ai[silero,whisper,piper,websocket,openai]>=1.11,<2",
 ]
 
 [project.scripts]
