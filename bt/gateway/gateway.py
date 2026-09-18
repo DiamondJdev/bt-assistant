@@ -22,11 +22,13 @@ app = FastAPI()
 store = get_store()
 
 if CONFIG.voice_enabled:
+	log.info("Voice enabled, mounting voice routes")
 	from bt.voice.routes import router as voice_router
 
 	app.include_router(voice_router)
 
 if CONFIG.dev_ui_enabled:
+	log.info("Developer mode enabled, mounting DevUI routes")
 	from bt.devui.routes import router as devui_router
 
 	app.include_router(devui_router)
@@ -42,13 +44,10 @@ class ChatResponse(BaseModel):
 	text: str
 	compute: str
 
-
 @app.get("/health")
 def health() -> dict[str, str]:
 	return {"status": "ok"}
 
-
-# Voice turns land in the same table, so this also exposes spoken history.
 @app.get("/history")
 async def get_history(session_id: str) -> list[Turn]:
 	return await asyncio.to_thread(store.history, session_id)
