@@ -13,7 +13,8 @@ from dataclasses import dataclass
 class Config:
     # Local LLM (Ollama)
     ollama_base_url: str = os.environ.get("BT_OLLAMA_URL", "http://127.0.0.1:11434")
-    ollama_model: str = os.environ.get("BT_OLLAMA_MODEL", "qwen2.5:14b")
+    ollama_model: str = os.environ.get("BT_OLLAMA_MODEL", "qwen3:8b")
+    # ollama_model: str = os.environ.get("BT_OLLAMA_MODEL", "gpt-oss:20b")
 
     # Cloud fallback.
     openai_api_key: str | None = os.environ.get("OPENAI_API_KEY")
