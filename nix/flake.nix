@@ -36,8 +36,7 @@
                 pkgs.libsndfile
               ]
             }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-            echo "BT dev shell. Run 'uv sync' once, then 'uv run bt' to start."
-            echo "Ollama must be running separately (nixos: services.ollama.enable)."
+            echo "BT dev shell. Run 'uv sync' to sync packages, 'uv run bt' to start."
           '';
         };
       }
