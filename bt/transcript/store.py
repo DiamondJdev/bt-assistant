@@ -6,10 +6,13 @@ Every turn's text, input mode, and processing info gets digested here
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from bt.config import CONFIG
 
 # DB Schema storing sessions and turns. We create an index on session_id+ts for efficient retrieval of recent turns
 SCHEMA = """
@@ -51,16 +54,22 @@ class TranscriptStore:
 	def __init__(self, db_path: str):
 		Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 		self._conn = sqlite3.connect(db_path, check_same_thread=False)
+		# The connection is shared across threads (HTTP handlers and the voice
+		# pipeline), so every statement below runs under _lock. WAL lets readers
+		# proceed while a write is in flight.
+		self._lock = threading.Lock()
+		self._conn.execute("PRAGMA journal_mode=WAL")
 		self._conn.executescript(SCHEMA)
 		self._conn.commit()
 
 	def new_session(self, label: str | None = None) -> str:
 		session_id = str(uuid.uuid4())
-		self._conn.execute(
-			"INSERT INTO sessions (id, started_at, label) VALUES (?, ?, ?)",
-			(session_id, time.time(), label),
-		)
-		self._conn.commit()
+		with self._lock:
+			self._conn.execute(
+				"INSERT INTO sessions (id, started_at, label) VALUES (?, ?, ?)",
+				(session_id, time.time(), label),
+			)
+			self._conn.commit()
 		return session_id
 
 	def add_turn(
@@ -80,20 +89,22 @@ class TranscriptStore:
 			input_mode=input_mode,
 			compute=compute,
 		)
-		self._conn.execute(
-			"""INSERT INTO turns (id, session_id, ts, role, text, input_mode, compute)
-					VALUES (?, ?, ?, ?, ?, ?, ?)""",
-			(turn.id, turn.session_id, turn.ts, turn.role, turn.text, turn.input_mode, turn.compute),
-		)
-		self._conn.commit()
+		with self._lock:
+			self._conn.execute(
+				"""INSERT INTO turns (id, session_id, ts, role, text, input_mode, compute)
+						VALUES (?, ?, ?, ?, ?, ?, ?)""",
+				(turn.id, turn.session_id, turn.ts, turn.role, turn.text, turn.input_mode, turn.compute),
+			)
+			self._conn.commit()
 		return turn
 
 	# Returns the most recent 'limit' turns for a given session with session id equal to 'session_id'
 	def history(self, session_id: str, limit: int = 200) -> list[Turn]:
-		rows = self._conn.execute(
-			"""SELECT id, session_id, ts, role, text, input_mode, compute
-					FROM turns WHERE session_id = ? ORDER BY ts ASC LIMIT ?""", (session_id, limit),
-		).fetchall()
+		with self._lock:
+			rows = self._conn.execute(
+				"""SELECT id, session_id, ts, role, text, input_mode, compute
+						FROM turns WHERE session_id = ? ORDER BY ts ASC LIMIT ?""", (session_id, limit),
+			).fetchall()
 		return [Turn(*row) for row in rows]
 
 	# Same as history(), but formatted for an LLM chat call (role/content only)
@@ -104,3 +115,15 @@ class TranscriptStore:
 			{"role": "user" if t.role == "user" else "assistant", "content": t.text}
 			for t in turns
 		]
+
+
+_STORE: TranscriptStore | None = None
+
+
+# Shared by the HTTP gateway and the voice pipeline so both modalities read and
+# write one transcript. Session ids are therefore interchangeable between them.
+def get_store() -> TranscriptStore:
+	global _STORE
+	if _STORE is None:
+		_STORE = TranscriptStore(CONFIG.db_path)
+	return _STORE
