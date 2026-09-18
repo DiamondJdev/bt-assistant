@@ -15,6 +15,8 @@ import httpx
 from bt.config import CONFIG
 from bt.personality.system_prompt import SYSTEM_PROMPT
 
+from pipecat.processors.aggregators.llm_context import LLMContextMessage
+
 log = logging.getLogger("bt.llm")
 
 ESCALATION_PHRASES = (
@@ -45,7 +47,7 @@ def _wants_escalation(user_text: str) -> bool:
 	lowered = user_text.lower()
 	return any(phrase.lower() in lowered for phrase in ESCALATION_PHRASES)
 
-async def _call_ollama(messages: list[dict]) -> str:
+async def _call_ollama(messages: list[LLMContextMessage]) -> str:
 	payload = {
 		"model": CONFIG.ollama_model,
 		"messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
@@ -58,7 +60,7 @@ async def _call_ollama(messages: list[dict]) -> str:
 		return data["message"]["content"]
 
 
-async def _call_openai(messages: list[dict]) -> str:
+async def _call_openai(messages: list[LLMContextMessage]) -> str:
 	if not CONFIG.openai_api_key:
 		raise RuntimeError(
 			"Escalation requested but OPENAI_API_KEY is not set"
@@ -79,7 +81,7 @@ async def _call_openai(messages: list[dict]) -> str:
 # Respond to a user message, using either the local Ollama model or the cloud OpenAI model
 #
 # message is prior chat history plus latest user input, in role/content form
-async def respond(messages: list[dict], user_text: str, provider: str | None = "local") -> LLMResponse | None:
+async def respond(messages: list[LLMContextMessage], user_text: str, provider: str | None = "local") -> LLMResponse | None:
 	provider = provider or "local"
 
 	if _wants_escalation(user_text):
