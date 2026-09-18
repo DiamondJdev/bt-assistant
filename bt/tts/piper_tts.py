@@ -16,7 +16,7 @@ log = logging.getLogger("bt.tts")
 
 
 def synthesize_to_wav(text: str) -> Path:
-    out = Path(tempfile.mkstemp(suffix=".wav"))
+    out = Path(tempfile.mkdtemp(suffix=".wav"))
     # Run pipper CLI inline
     # TODO: This won't scale, make this more efficient
     proc = subprocess.run(
