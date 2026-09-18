@@ -10,11 +10,11 @@ Phase 1, in progress:
 - text-mode conversational core
   - [] Audio Capture
   - [] Personality (SOUL.md)
-  - [] local/cloudLLM routing
+  - [x] local/cloudLLM routing
   - [] live transcript dashboard
 - API interfacing
-  - [] Ollama (local)
-  - [] OpenAI (cloudLLM)
+  - [x] Ollama (local)
+  - [x] OpenAI (cloudLLM)
 
 ## Quickstart (dev)
 
