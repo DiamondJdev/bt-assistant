@@ -77,8 +77,8 @@ async def _call_openai(messages: list[dict]) -> str:
 # Respond to a user message, using either the local Ollama model or the cloud OpenAI model
 #
 # message is prior chat history plus latest user input, in role/content form
-async def respond(messages: list[dict], user_text: str, provider: str | None = "local") -> LLMResponse:
-    provider = "local" | "cloud" | None
+async def respond(messages: list[dict], user_text: str, provider: str | None = "local") -> LLMResponse | None:
+    provider = provider or "local"
 
     if _wants_escalation(user_text):
         log.info("user requested escalation, calling cloud")
@@ -97,8 +97,9 @@ async def respond(messages: list[dict], user_text: str, provider: str | None = "
             cloud_response = await _call_openai(messages)
             return LLMResponse(text=cloud_response, compute="openai")
     except httpx.HTTPError as exc:
-        log.warning("ollama call failed (%s), escalating to cloud", exc)
-        return await respond(messages, user_text, "cloud") # call for another attempt with cloud provider
+        raise RuntimeError(f"HTTP error during LLM response: {exc}") from exc
+        # log.warning("ollama call failed (%s), escalating to cloud", exc)
+        # return await respond(messages, user_text, "cloud") # call for another attempt with cloud provider
     except Exception as exc:
         log.exception("Unexpected error during LLM response: %s", exc)
         raise
