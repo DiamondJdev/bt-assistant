@@ -52,7 +52,7 @@ async def _call_ollama(messages: list[dict]) -> str:
 		"stream": False, # TODO: support streaming
 	}
 	async with httpx.AsyncClient(timeout=60) as client:
-		resp = await client.post(f"{CONFIG.ollama_base_url}/api/chat", json=payload)
+		resp = await client.post(CONFIG.ollama_url("/api/chat"), json=payload)
 		resp.raise_for_status()
 		data = resp.json()
 		return data["message"]["content"]
