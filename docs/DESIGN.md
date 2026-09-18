@@ -42,9 +42,10 @@ backend answered it, for tuning later.
 
 ## Personality
 
-`bt/personality/SOUL.md` will hold the system prompt attached to each message.
-This will take tuning, so expect frequent changes. `SOUL.MD` modeled similar to
-OpenClaw and Hermes Agent approaches?
+`bt/personality/router.py` holds the system prompt attached to each message.
+This will take tuning, so expect frequent changes.
+
+> `SOUL.MD` modeled similar to OpenClaw and Hermes Agent approach?
 
 ## Open for phase 2+
 
