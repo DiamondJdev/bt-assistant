@@ -41,8 +41,6 @@ export OPENAI_API_KEY=... # optional, only needed for cloud escalation
 uv run bt
 ```
 
-program is accessible on [localhost:8765](https://127.0.0.1:8765)
-
 ### If not using Nix
 
 ```sh
