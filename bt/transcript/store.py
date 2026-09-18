@@ -11,6 +11,9 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
+
+from pipecat.processors.aggregators.llm_context import LLMContextMessage
 
 from bt.config import CONFIG
 
@@ -108,13 +111,16 @@ class TranscriptStore:
 		return [Turn(*row) for row in rows]
 
 	# Same as history(), but formatted for an LLM chat call (role/content only)
-	def as_chat_messages(self, session_id: str, limit: int = 50) -> list[dict]:
+	def as_chat_messages(self, session_id: str, limit: int = 50) -> list[LLMContextMessage]:
 		"""Recent turns formatted for an LLM chat call (role/content only)."""
 		turns = self.history(session_id, limit=limit)
-		return [
-			{"role": "user" if t.role == "user" else "assistant", "content": t.text}
-			for t in turns
-		]
+		return cast(
+			"list[LLMContextMessage]",
+			[
+				{"role": "user" if t.role == "user" else "assistant", "content": t.text}
+				for t in turns
+			],
+		)
 
 
 _STORE: TranscriptStore | None = None
