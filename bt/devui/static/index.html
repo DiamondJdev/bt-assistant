@@ -9,7 +9,7 @@
 <title>BT — dev</title>
 <style>
 	:root { color-scheme: dark; --bg:#14161a; --panel:#1c1f26; --line:#2b3039;
-		--fg:#e6e8ec; --dim:#878e9c; --accent:#6ea8fe; --user:#9ad0a0; }
+		--fg:#e6e8ec; --dim:#878e9c; --accent:#6ea8fe; --user:#9ad0a0; --tool:#d3a24c; }
 	* { box-sizing: border-box; }
 	body { margin:0; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
 		background:var(--bg); color:var(--fg); }
@@ -29,6 +29,7 @@
 	.turn .who { color:var(--dim); font-size:12px; text-transform:uppercase;
 		letter-spacing:.06em; display:block; }
 	.turn.user .body { color:var(--user); }
+	.turn.tool .body { color:var(--tool); font-size:13px; }
 	.turn.partial .body { color:var(--dim); font-style:italic; }
 	aside h2 { margin:0 0 .75rem; font-size:12px; letter-spacing:.08em;
 		text-transform:uppercase; color:var(--dim); font-weight:600; }
