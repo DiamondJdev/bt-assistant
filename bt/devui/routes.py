@@ -27,7 +27,7 @@ def config() -> dict:
 	return {
 		"dev_mode_enabled": CONFIG.developer_mode,
 		"ollama_model": CONFIG.ollama_model,
-		"cloud_enabled": CONFIG.openai_api_key != "",
+		"cloud_enabled": bool(CONFIG.openai_api_key),
 		"piper_voice": CONFIG.piper_voice,
 		"whisper_model": CONFIG.whisper_model,
 		"voice_enabled": CONFIG.voice_enabled,
