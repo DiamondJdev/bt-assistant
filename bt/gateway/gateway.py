@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from bt.config import CONFIG
 from bt.llm.router import respond
+from bt.tools.registry import default_context
 from bt.transcript.store import Turn, get_store
 
 log = logging.getLogger("bt.gateway")
@@ -43,6 +44,7 @@ class ChatResponse(BaseModel):
 	session_id: str
 	text: str
 	compute: str
+	tools_used: list[str] = []
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -59,11 +61,17 @@ async def chat(req: ChatRequest) -> ChatResponse:
 	try:
 		await asyncio.to_thread(store.add_turn, session_id, "user", req.text, input_mode="text")
 		history = await asyncio.to_thread(store.as_chat_messages, session_id)
-		result = await respond(history, req.text)
+		ctx = default_context(session_id, "text") if CONFIG.tools_enabled else None
+		result = await respond(history, req.text, ctx=ctx)
 		if not result:
 			raise RuntimeError("LLM did not return a response")
 		await asyncio.to_thread(store.add_turn, session_id, "bt", result.text, compute=result.compute)
-		return ChatResponse(session_id=session_id, text=result.text, compute=result.compute)
+		return ChatResponse(
+			session_id=session_id,
+			text=result.text,
+			compute=result.compute,
+			tools_used=list(result.tools_used),
+		)
 	except Exception as e:
 		log.exception("chat request failed")
 		raise HTTPException(status_code=502, detail=f"{session_id}: {e}") from e

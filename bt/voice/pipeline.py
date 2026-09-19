@@ -14,6 +14,10 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
+from pipecat.processors.frameworks.rtvi import (
+	RTVIFunctionCallReportLevel,
+	RTVIObserverParams,
+)
 from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
@@ -28,7 +32,8 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat.utils.text.skip_tags_aggregator import SkipTagsAggregator
 
 from bt.config import CONFIG
-from bt.personality.system_prompt import SYSTEM_PROMPT
+from bt.personality.system_prompt import render_system_prompt
+from bt.tools.registry import default_context, pipecat_tools
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
 from bt.voice.serializer import JSONFrameSerializer
@@ -71,13 +76,19 @@ def build_worker(
 		base_url=CONFIG.ollama_url("v1"),
 		settings=OLLamaLLMService.Settings(
 			model=CONFIG.ollama_model,
-			system_instruction=SYSTEM_PROMPT,
+			system_instruction=render_system_prompt(surface="voice"),
 		),
 	)
 	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")]) # Filter out thinking from TTS responses to clients
+	tools = pipecat_tools() if CONFIG.tools_enabled else None
+
 	# Conversation history
-	context = LLMContext(messages=history or [])
+	context = (
+		LLMContext(messages=history or [], tools=tools)
+		if tools
+		else LLMContext(messages=history or [])
+	)
 
 	# This owns the VADController which decides when a turn starts and stops.
 	# NOTE: Frequent Cutoffs, Missed Speech, etc. are likely culprits of the VAD
@@ -101,9 +112,14 @@ def build_worker(
 		params=PipelineParams(
 			enable_metrics=True, # Tracks and Passes metrics for DevUI
 			enable_usage_metrics=True,
-			# rate in Hz
+
+			# rates in Hz
 			audio_in_sample_rate=SAMPLE_RATE,
 			audio_out_sample_rate=SAMPLE_RATE,
+		),
+		app_resources=default_context(session_id, "voice") if tools else None,
+		rtvi_observer_params=RTVIObserverParams(
+			function_call_report_level={"*": RTVIFunctionCallReportLevel.FULL},
 		),
 		observers=[TranscriptObserver(get_store(), session_id)],
 	)
