@@ -8,13 +8,13 @@ See [DESIGN.md](./docs/DESIGN.md) for architecture and the decisions behind it.
 Phase 1, in progress:
 
 - text-mode conversational core
-  - [] Audio Capture
-  - [] Personality (SOUL.md)
+  - [x] Audio Capture
+  - [x] Personality (SOUL.md)
   - [x] local/cloudLLM routing
-  - [] live transcript dashboard
+  - [x] live transcript dashboard
 - API interfacing
   - [x] Ollama (local)
-  - [x] OpenAI (cloudLLM)
+  - [untested] OpenAI (cloudLLM)
 
 ## Quickstart (dev)
 
@@ -34,12 +34,14 @@ eg:
 ollama pull qwen2.5:14b
 ```
 
-Then add API key and start
+Then copy .env.example, fill values, and start
 
 ```sh
-export OPENAI_API_KEY=... # optional, only needed for cloud escalation
+cp .env.example .env
 uv run bt
 ```
+
+Use `uv run bt` for production or `uv run bt-dev` for testing enviroments.
 
 ### If not using Nix
 
