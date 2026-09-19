@@ -32,6 +32,10 @@ function appendTo(el, text) {
 
 function closeTurn() { openTurn = null; }
 
+// Tool calls arrive as a pair of RTVI events keyed by tool_call_id, so the
+// chip opened by the first is held here until the second resolves it.
+const toolChips = new Map();
+
 // ---------- metrics ----------
 
 function row(tbody, label, value) {
@@ -197,6 +201,27 @@ function handle(msg) {
 		case "user-stopped-speaking":
 			setStatus("connected", true);
 			break;
+		case "llm-function-call-in-progress": {
+			const d = msg.data ?? {};
+			closeTurn();
+			const args = d.arguments && Object.keys(d.arguments).length
+				? JSON.stringify(d.arguments)
+				: "";
+			const el = turn("tool partial", "tool");
+			el.querySelector(".body").textContent = `${d.function_name ?? "?"}(${args})`;
+			toolChips.set(d.tool_call_id, el);
+			break;
+		}
+		case "llm-function-call-stopped": {
+			const d = msg.data ?? {};
+			const el = toolChips.get(d.tool_call_id);
+			if (el) {
+				el.classList.remove("partial");
+				appendTo(el, ` -> ${d.cancelled ? "cancelled" : String(d.result ?? "")}`);
+				toolChips.delete(d.tool_call_id);
+			}
+			break;
+		}
 		case "metrics":
 			onMetrics(msg.data ?? {});
 			break;
