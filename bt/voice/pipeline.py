@@ -11,14 +11,18 @@ from __future__ import annotations
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.pipeline.llm_switcher import LLMSwitcher
 from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.service_switcher import ServiceSwitcherStrategyFailover
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
 from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
 )
+from pipecat.services.llm_service import LLMService
 from pipecat.services.ollama.llm import OLLamaLLMService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.piper.tts import PiperTTSService
 from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transports.websocket.fastapi import (
@@ -31,6 +35,7 @@ from bt.config import CONFIG
 from bt.personality.system_prompt import SYSTEM_PROMPT
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
+from bt.voice.routing import EscalationRouter
 from bt.voice.serializer import JSONFrameSerializer
 
 SAMPLE_RATE = 16_000
@@ -67,13 +72,30 @@ def build_worker(
 			no_speech_prob=NO_SPEECH_PROB,
 		),
 	)
-	llm = OLLamaLLMService(
+	local_llm = OLLamaLLMService(
 		base_url=CONFIG.ollama_url("v1"),
 		settings=OLLamaLLMService.Settings(
 			model=CONFIG.ollama_model,
 			system_instruction=SYSTEM_PROMPT,
 		),
 	)
+	# Labels match the text path's LLMResponse.compute, so transcripts record
+	# which backend answered regardless of modality.
+	compute_labels: dict[LLMService, str] = {local_llm: "ollama"}
+	cloud_llm = None
+	if CONFIG.openai_api_key:
+		cloud_llm = OpenAILLMService(
+			api_key=CONFIG.openai_api_key,
+			settings=OpenAILLMService.Settings(
+				model=CONFIG.openai_model,
+				system_instruction=SYSTEM_PROMPT,
+				max_completion_tokens=1024,
+			),
+		)
+		compute_labels[cloud_llm] = "openai"
+	# Local first; failover moves to cloud if the local service stops working.
+	llm = LLMSwitcher(llms=list(compute_labels), strategy_type=ServiceSwitcherStrategyFailover)
+	router = EscalationRouter(llm, local_llm, cloud_llm)
 	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")]) # Filter out thinking from TTS responses to clients
 	# Conversation history
@@ -90,6 +112,7 @@ def build_worker(
 		transport.input(),
 		stt,
 		aggregators.user(),
+		router,
 		llm,
 		tts,
 		transport.output(),
@@ -105,5 +128,5 @@ def build_worker(
 			audio_in_sample_rate=SAMPLE_RATE,
 			audio_out_sample_rate=SAMPLE_RATE,
 		),
-		observers=[TranscriptObserver(get_store(), session_id)],
+		observers=[TranscriptObserver(get_store(), session_id, compute_labels)],
 	)

@@ -8,6 +8,7 @@ See DESIGN.md "Routing: local vs. cloud" for the policy in-depth.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -28,6 +29,17 @@ ESCALATION_PHRASES = (
 )
 
 
+# Reasoning models (e.g. qwen3) emit <think>...</think> before the answer.
+# An unterminated block (reply cut off mid-thought) is dropped to the end.
+_THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
+
+
+# Strip reasoning blocks so only the spoken/stored answer remains.
+# Shared by the text router and the voice transcript observer.
+def strip_thinking(text: str) -> str:
+	return _THINK_RE.sub("", text).strip()
+
+
 @dataclass
 class LLMResponse:
 	text: str
@@ -42,8 +54,8 @@ def _looks_degenerate(reply: str, user_text: str) -> bool:
 		return True
 	return False
 
-# Checks for user request for escalation
-def _wants_escalation(user_text: str) -> bool:
+# Checks for user request for escalation. Public so the voice pipeline routes on the same phrases.
+def wants_escalation(user_text: str) -> bool:
 	lowered = user_text.lower()
 	return any(phrase.lower() in lowered for phrase in ESCALATION_PHRASES)
 
@@ -57,7 +69,7 @@ async def _call_ollama(messages: list[LLMContextMessage]) -> str:
 		resp = await client.post(CONFIG.ollama_url("/api/chat"), json=payload)
 		resp.raise_for_status()
 		data = resp.json()
-		return data["message"]["content"]
+		return strip_thinking(data["message"]["content"])
 
 
 async def _call_openai(messages: list[LLMContextMessage]) -> str:
@@ -70,13 +82,13 @@ async def _call_openai(messages: list[LLMContextMessage]) -> str:
 	client = openai.AsyncOpenAI(api_key=CONFIG.openai_api_key)
 	resp = await client.chat.completions.create(
 		model=CONFIG.openai_model,
-		max_tokens=1024,
+		max_completion_tokens=1024,  # GPT-5 family rejects the legacy max_tokens
 		messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],  # type: ignore
 	)
 	# Checks for malformed response from API
 	if not resp.choices or not resp.choices[0].message or not resp.choices[0].message.content:
 		raise RuntimeError("OpenAI response missing choices or message")
-	return resp.choices[0].message.content # TODO: support streaming
+	return strip_thinking(resp.choices[0].message.content) # TODO: support streaming
 
 # Respond to a user message, using either the local Ollama model or the cloud OpenAI model
 #
@@ -84,7 +96,7 @@ async def _call_openai(messages: list[LLMContextMessage]) -> str:
 async def respond(messages: list[LLMContextMessage], user_text: str, provider: str | None = "local") -> LLMResponse | None:
 	provider = provider or "local"
 
-	if _wants_escalation(user_text):
+	if wants_escalation(user_text):
 		log.info("user requested escalation, calling cloud")
 		provider = "cloud"
 
