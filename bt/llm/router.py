@@ -29,13 +29,9 @@ ESCALATION_PHRASES = (
 )
 
 
-# Reasoning models (e.g. qwen3) emit <think>...</think> before the answer.
-# An unterminated block (reply cut off mid-thought) is dropped to the end.
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
 
 
-# Strip reasoning blocks so only the spoken/stored answer remains.
-# Shared by the text router and the voice transcript observer.
 def strip_thinking(text: str) -> str:
 	return _THINK_RE.sub("", text).strip()
 
@@ -54,7 +50,7 @@ def _looks_degenerate(reply: str, user_text: str) -> bool:
 		return True
 	return False
 
-# Checks for user request for escalation. Public so the voice pipeline routes on the same phrases.
+# Checks for user request for escalation
 def wants_escalation(user_text: str) -> bool:
 	lowered = user_text.lower()
 	return any(phrase.lower() in lowered for phrase in ESCALATION_PHRASES)
@@ -82,7 +78,7 @@ async def _call_openai(messages: list[LLMContextMessage]) -> str:
 	client = openai.AsyncOpenAI(api_key=CONFIG.openai_api_key)
 	resp = await client.chat.completions.create(
 		model=CONFIG.openai_model,
-		max_completion_tokens=1024,  # GPT-5 family rejects the legacy max_tokens
+		max_completion_tokens=1024,
 		messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],  # type: ignore
 	)
 	# Checks for malformed response from API

@@ -24,8 +24,6 @@ from bt.transcript.store import TranscriptStore
 
 
 class TranscriptObserver(BaseObserver):
-	# compute_labels maps each LLM service in the pipeline to the backend name
-	# stored on its turns ('ollama' | 'openai').
 	def __init__(self, store: TranscriptStore, session_id: str, compute_labels: dict[LLMService, str]) -> None:
 		super().__init__()
 		self._store = store

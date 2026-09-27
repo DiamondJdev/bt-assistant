@@ -104,8 +104,6 @@ class TranscriptStore:
 	# Returns the most recent 'limit' turns for a given session with session id equal to 'session_id'
 	def history(self, session_id: str, limit: int = 200) -> list[Turn]:
 		with self._lock:
-			# Newest-first so LIMIT keeps the latest turns (served by idx_turns_session),
-			# then reversed back to chronological order.
 			rows = self._conn.execute(
 				"""SELECT id, session_id, ts, role, text, input_mode, compute
 						FROM turns WHERE session_id = ? ORDER BY ts DESC LIMIT ?""", (session_id, limit),

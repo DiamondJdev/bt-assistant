@@ -79,8 +79,6 @@ def build_worker(
 			system_instruction=SYSTEM_PROMPT,
 		),
 	)
-	# Labels match the text path's LLMResponse.compute, so transcripts record
-	# which backend answered regardless of modality.
 	compute_labels: dict[LLMService, str] = {local_llm: "ollama"}
 	cloud_llm = None
 	if CONFIG.openai_api_key:
@@ -93,7 +91,6 @@ def build_worker(
 			),
 		)
 		compute_labels[cloud_llm] = "openai"
-	# Local first; failover moves to cloud if the local service stops working.
 	llm = LLMSwitcher(llms=list(compute_labels), strategy_type=ServiceSwitcherStrategyFailover)
 	router = EscalationRouter(llm, local_llm, cloud_llm)
 	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
