@@ -19,14 +19,16 @@ from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.services.llm_service import LLMService
 from pipecat.services.stt_service import STTService
 
+from bt.llm.router import strip_thinking
 from bt.transcript.store import TranscriptStore
 
 
 class TranscriptObserver(BaseObserver):
-	def __init__(self, store: TranscriptStore, session_id: str) -> None:
+	def __init__(self, store: TranscriptStore, session_id: str, compute_labels: dict[LLMService, str]) -> None:
 		super().__init__()
 		self._store = store
 		self._session_id = session_id
+		self._compute_labels = compute_labels
 		self._reply: list[str] = []
 
 	async def on_push_frame(self, data: FramePushed) -> None:
@@ -46,7 +48,8 @@ class TranscriptObserver(BaseObserver):
 		elif isinstance(frame, LLMTextFrame):
 			self._reply.append(frame.text)
 		elif isinstance(frame, LLMFullResponseEndFrame):
-			await self._add_turn("bt", "".join(self._reply), compute="ollama")
+			reply = strip_thinking("".join(self._reply))
+			await self._add_turn("bt", reply, compute=self._compute_labels.get(src))
 			self._reply.clear()
 
 	async def _add_turn(self, role: str, text: str, **kwargs) -> None:
