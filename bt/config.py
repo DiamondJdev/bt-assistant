@@ -44,6 +44,8 @@ class Config:
 	whisper_model: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_MODEL", "small.en"))
 	whisper_device: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_DEVICE", "auto"))
 
+	host: str = field(default_factory=lambda: os.environ.get("BT_HOST", "127.0.0.1"))
+
 	# Storage (SQLite)
 	db_path: str = field(default_factory=lambda: os.environ.get("BT_DB_PATH", "bt.sqlite3"))
 

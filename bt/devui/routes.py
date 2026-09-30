@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from bt.config import CONFIG
 
@@ -23,15 +23,15 @@ def index() -> HTMLResponse:
 
 
 @router.get("/config")
-def config() -> dict:
-	return {
+def config() -> JSONResponse:
+	return JSONResponse({
 		"dev_mode_enabled": CONFIG.developer_mode,
 		"ollama_model": CONFIG.ollama_model,
 		"cloud_enabled": CONFIG.openai_api_key != "",
 		"piper_voice": CONFIG.piper_voice,
 		"whisper_model": CONFIG.whisper_model,
 		"voice_enabled": CONFIG.voice_enabled,
-	}
+	}, headers={"Access-Control-Allow-Origin": "*"}) # Open CORS for remote devices to access
 
 
 @router.get("/static/{name}")
