@@ -5,6 +5,14 @@
 const RATE = 16000; // Hz
 const $ = (id) => document.getElementById(id);
 
+function serverUrl() {
+	const raw = new URLSearchParams(location.search).get("server");
+	if (!raw) return new URL(location.origin);
+	const url = new URL(raw); // throws on garbage, caught by callers
+	if (!/^https?:$/.test(url.protocol)) throw new Error("server must be http(s)");
+	return url;
+}
+
 let ws = null, micCtx = null, micStream = null, playCtx = null, playAt = 0;
 let sessionId = null;
 const metrics = { ttfb: {}, processing: {}, tokens: null, characters: null };
@@ -128,7 +136,7 @@ async function startMic() {
 	if (!navigator.mediaDevices?.getUserMedia) {
 		throw new Error(
 			"mic access needs a secure context (https, or localhost) — " +
-			"over Tailscale run `tailscale serve https / http://127.0.0.1:8080`",
+			"run `bt-devui` locally and open it via 127.0.0.1",
 		);
 	}
 	micStream = await navigator.mediaDevices.getUserMedia({
@@ -209,9 +217,10 @@ function setStatus(text, on) {
 }
 
 async function connect() {
-	const proto = location.protocol === "https:" ? "wss" : "ws";
+	const server = serverUrl();
+	const proto = server.protocol === "https:" ? "wss" : "ws";
 	const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
-	ws = new WebSocket(`${proto}://${location.host}/voice/ws${q}`);
+	ws = new WebSocket(`${proto}://${server.host}/voice/ws${q}`);
 
 	ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
 	ws.onclose = () => { setStatus("disconnected", false); teardown(); };
@@ -242,7 +251,17 @@ $("mic").onclick = async () => {
 	} finally { $("mic").disabled = false; }
 };
 
-fetch("/dev/config").then((r) => r.json()).then((c) => {
+$("server").value = new URLSearchParams(location.search).get("server") ?? "";
+$("server").onchange = (e) => {
+	const q = new URLSearchParams(location.search);
+	e.target.value.trim() ? q.set("server", e.target.value.trim()) : q.delete("server");
+	location.search = q.toString();
+};
+
+Promise.resolve().then(() => fetch(new URL("/dev/config", serverUrl()))).then((r) => {
+	if (!r.ok) throw new Error(`config ${r.status}`);
+	return r.json();
+}).then((c) => {
 	$("m-llm").textContent = c.ollama_model;
 	$("m-stt").textContent = c.whisper_model;
 	$("m-tts").textContent = c.piper_voice;
@@ -251,4 +270,4 @@ fetch("/dev/config").then((r) => r.json()).then((c) => {
 		$("mic").title = "Set BT_VOICE=1 to enable the voice pipeline";
 		setStatus("voice disabled", false);
 	}
-});
+}).catch((err) => setStatus(`server unreachable: ${err.message ?? err}`, false));
