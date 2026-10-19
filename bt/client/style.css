@@ -16,17 +16,15 @@ nav select { flex: 1; min-width: 0; }
 .turn { margin: 0 0 24px; max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .turn b { display: block; color: #b6c8d2; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
 .turn.user { border-left: 3px solid #f2bf79; padding-left: 14px; }
-.empty, .hint, #status, #login p { color: #b6c8d2; line-height: 1.5; }
+.empty, .hint, #status { color: #b6c8d2; line-height: 1.5; }
 #chat { display: flex; gap: 10px; align-items: stretch; }
 textarea { resize: vertical; width: 100%; background: #112330; }
-#send, #login button { background: #edbd7d; color: #172c3b; border-color: #edbd7d; }
+#send { background: #edbd7d; color: #172c3b; border-color: #edbd7d; }
 .voice { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 #talk { touch-action: none; user-select: none; -webkit-user-select: none; }
 #talk[aria-pressed="true"] { background: #edbd7d; color: #172c3b; }
 .hint { font-size: 13px; }
 #status { min-height: 24px; padding-bottom: env(safe-area-inset-bottom); }
-#login { max-width: 400px; padding-top: 32px; }
-#login input { display: block; width: 100%; margin: 8px 0 16px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 [hidden] { display: none !important; }
 @media (max-width: 520px) { h1 span { display: block; margin: 4px 0 0; } nav label { display: none; } .voice button { flex: 1; } #log { height: max(230px, calc(100dvh - 420px)); } }

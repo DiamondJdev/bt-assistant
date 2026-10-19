@@ -18,44 +18,29 @@ def client(monkeypatch):
         yield c
 
 
-def login(client):
-    assert client.post('/auth/login', json={'token': 'test-access-token'}).status_code == 200
+def test_routes_are_open_without_credentials(client):
+    assert client.get('/sessions').json() == []
+    assert client.get('/sessions').headers['cache-control'] == 'no-store'
+    assert client.post('/sessions').status_code == 200
+    assert client.post('/auth/login', json={'token': 'x'}).status_code == 404
 
 
-def test_private_routes_require_token_and_cookie_is_http_only(client):
-    for path in ['/history?session_id=missing', '/sessions', '/config', '/ready']:
-        assert client.get(path).status_code == 401
-    assert client.post('/chat', json={'text': 'hello'}).status_code == 401
-    assert client.post('/auth/login', json={'token': 'wrong'}).status_code == 401
-    response = client.post('/auth/login', json={'token': 'test-access-token'})
-    cookie = response.headers['set-cookie'].lower()
-    assert 'httponly' in cookie and 'secure' in cookie and 'samesite=strict' in cookie
-    sessions = client.get('/sessions')
-    assert sessions.json() == []
-    assert sessions.headers['cache-control'] == 'no-store'
-    client.post('/auth/logout')
-    assert client.get('/sessions').status_code == 401
-    assert client.get('/sessions', headers={'Authorization': 'Bearer test-access-token'}).status_code == 200
-
-
-def test_cross_origin_cookie_requests_are_rejected(client):
-    login(client)
+def test_cross_origin_requests_are_rejected(client):
+    # Open access must not let websites the owner visits drive BT.
     assert client.post('/sessions', headers={'Origin': 'https://other.example'}).status_code == 403
-    assert client.post('/auth/login', json={'token': 'test-access-token'}, headers={'Origin': 'https://other.example'}).status_code == 403
+    assert client.get('/sessions', headers={'Origin': 'https://other.example'}).status_code == 403
 
 
 def test_same_host_origin_is_accepted_behind_tls_proxy(client):
-    bearer = {'Authorization': 'Bearer test-access-token'}
     # Serve terminates TLS, so BT may see plain http for an https page.
-    assert client.post('http://testserver/sessions', headers={**bearer, 'Origin': 'https://testserver'}).status_code == 200
-    proxied = {**bearer, 'Host': '127.0.0.1:8080', 'X-Forwarded-Host': 'bt.example.ts.net', 'Origin': 'https://bt.example.ts.net'}
+    assert client.post('http://testserver/sessions', headers={'Origin': 'https://testserver'}).status_code == 200
+    proxied = {'Host': '127.0.0.1:8080', 'X-Forwarded-Host': 'bt.example.ts.net', 'Origin': 'https://bt.example.ts.net'}
     assert client.post('/sessions', headers=proxied).status_code == 200
     proxied['Origin'] = 'https://other.example'
     assert client.post('/sessions', headers=proxied).status_code == 403
 
 
 def test_sessions_chat_validation_and_unknown_ids(client, monkeypatch):
-    login(client)
     async def reply(messages, text):
         return LLMResponse('Hello pilot', 'ollama')
     monkeypatch.setattr(gateway, 'respond', reply)
@@ -73,7 +58,6 @@ def test_sessions_chat_validation_and_unknown_ids(client, monkeypatch):
 
 
 def test_failed_chat_preserves_session_and_can_be_retried(client, monkeypatch):
-    login(client)
     async def fail(*args):
         raise RuntimeError('sensitive provider detail')
     monkeypatch.setattr(gateway, 'respond', fail)
@@ -86,7 +70,6 @@ def test_failed_chat_preserves_session_and_can_be_retried(client, monkeypatch):
 
 
 def test_readiness_checks_model_and_reports_dependency_failure(client, monkeypatch):
-    login(client)
     async def tags(request):
         return httpx.Response(200, json={'models': [{'name': 'qwen3:8b'}]})
     original = httpx.AsyncClient

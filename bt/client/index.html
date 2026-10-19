@@ -8,15 +8,8 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><h1>BT<span>Your personal assistant</span></h1><button id="logout" hidden>Lock</button></header>
+<header><h1>BT<span>Your personal assistant</span></h1></header>
 <main>
-  <form id="login" hidden>
-    <h2>Connect to BT</h2>
-    <label for="token">Server access token</label>
-    <input id="token" type="password" autocomplete="current-password" required maxlength="512">
-    <button>Unlock</button>
-    <p>Your token stays on this device in a protected cookie.</p>
-  </form>
   <section id="assistant" hidden aria-label="Conversation">
     <nav aria-label="Saved conversations">
       <label for="sessions">Conversation</label>

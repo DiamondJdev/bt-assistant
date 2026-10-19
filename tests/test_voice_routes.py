@@ -5,7 +5,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from bt.gateway import gateway
 from bt.voice import routes
-from test_gateway import client, login
+from test_gateway import client
 
 # Voice transport is tested without downloading models or invoking inference.
 gateway.app.include_router(routes.router)
@@ -29,12 +29,7 @@ def voice_runtime(monkeypatch):
     monkeypatch.setattr(routes, 'build_worker', build)
 
 
-def test_voice_rejects_missing_token_and_wrong_origin(client):
-    with client.websocket_connect('wss://testserver/voice/ws') as ws:
-        with pytest.raises(WebSocketDisconnect) as exc:
-            ws.receive_json()
-        assert exc.value.code == 1008
-    login(client)
+def test_voice_rejects_wrong_origin(client):
     with client.websocket_connect('wss://testserver/voice/ws', headers={'Origin': 'https://evil.example'}) as ws:
         with pytest.raises(WebSocketDisconnect) as exc:
             ws.receive_json()
@@ -42,7 +37,6 @@ def test_voice_rejects_missing_token_and_wrong_origin(client):
 
 
 def test_voice_holds_conversation_lease_and_limits_connections(client, monkeypatch):
-    login(client)
     sid = client.post('/sessions').json()['session_id']
     monkeypatch.setattr(routes, 'create_speech_services', lambda: ())
     with client.websocket_connect(f'wss://testserver/voice/ws?session_id={sid}') as ws:
@@ -59,7 +53,6 @@ def test_voice_holds_conversation_lease_and_limits_connections(client, monkeypat
 
 
 def test_failed_voice_setup_releases_capacity_and_session(client, monkeypatch):
-    login(client)
     sid = client.post('/sessions').json()['session_id']
     def fail():
         raise RuntimeError('model unavailable')
@@ -76,7 +69,6 @@ def test_failed_voice_setup_releases_capacity_and_session(client, monkeypatch):
 
 
 def test_voice_models_reload_once_in_background_after_disconnect(client, monkeypatch):
-    login(client)
     calls = []
     monkeypatch.setattr(routes, 'create_speech_services', lambda: calls.append(1) or ())
     with client.websocket_connect('wss://testserver/voice/ws') as ws:
@@ -93,7 +85,6 @@ def test_voice_models_reload_once_in_background_after_disconnect(client, monkeyp
 
 
 def test_pipeline_key_error_is_not_reported_as_missing_conversation(client, monkeypatch):
-    login(client)
     monkeypatch.setattr(routes, 'create_speech_services', lambda: ())
     async def broken(self):
         raise KeyError('pipeline bug')

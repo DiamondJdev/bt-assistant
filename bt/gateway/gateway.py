@@ -4,20 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import secrets
 import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from bt.config import CONFIG
-from bt.gateway.auth import AccessMiddleware, COOKIE
+from bt.gateway.origin import OriginMiddleware
 from bt.llm.router import respond
 from bt.transcript.store import Turn, get_store
 
@@ -44,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(AccessMiddleware)
+app.add_middleware(OriginMiddleware)
 if STATIC.exists():
 	app.mount("/static", StaticFiles(directory=STATIC), name="client")
 
@@ -57,10 +56,6 @@ if CONFIG.dev_ui_enabled:
 	from bt.devui.routes import router as devui_router
 
 	app.include_router(devui_router)
-
-
-class LoginRequest(BaseModel):
-	token: str = Field(max_length=512)
 
 
 class ChatRequest(BaseModel):
@@ -84,20 +79,6 @@ class ChatResponse(BaseModel):
 @app.get("/")
 def client() -> FileResponse:
 	return FileResponse(STATIC / "index.html")
-
-
-@app.post("/auth/login")
-def login(req: LoginRequest, request: Request, response: Response) -> dict[str, str]:
-	if not CONFIG.api_token or not secrets.compare_digest(req.token.encode(), CONFIG.api_token.encode()):
-		raise HTTPException(401, "Invalid access token")
-	response.set_cookie(COOKIE, req.token, httponly=True, secure=request.url.scheme == "https", samesite="strict", max_age=60 * 60 * 24 * 30)
-	return {"status": "ok"}
-
-
-@app.post("/auth/logout")
-def logout(response: Response) -> dict[str, str]:
-	response.delete_cookie(COOKIE)
-	return {"status": "ok"}
 
 
 @app.get("/health")

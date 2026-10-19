@@ -13,10 +13,9 @@ BT runs as one server process for one owner. Your Mac and iPhone use the browser
 
    Python must come from Nix, not a downloaded uv interpreter under an administrator's home. Keep `.nix-runtime` and its profile generations in place: they retain the exact interpreter and libraries against Nix garbage collection. See [Nix development profiles](https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-develop). The service uses the installed environment directly and does not update it at startup. For reproducible upgrades, check out a reviewed commit and rerun this command while the service is stopped.
 
-2. Create `/etc/bt.env`, owned by root with mode `0600`. Generate the access token with `openssl rand -hex 32`. Keep secrets out of Nix expressions and Git.
+2. Optionally create `/etc/bt.env`, owned by root with mode `0600`, for provider settings and secrets. Keep secrets out of Nix expressions and Git.
 
    ```dotenv
-   BT_API_TOKEN=<your-generated-token>
    BT_OLLAMA_MODEL=qwen3:8b
    BT_WHISPER_DEVICE=cpu
    BT_WHISPER_COMPUTE=int8
@@ -46,11 +45,11 @@ BT runs as one server process for one owner. Your Mac and iPhone use the browser
    tailscale serve status
    ```
 
-   Open the reported HTTPS URL on your Mac or iPhone while connected to Tailscale. Enter the shared token to unlock the client. The browser uses an HTTP-only cookie; API clients send `Authorization: Bearer <token>`. Configure tailnet grants so only your intended devices can reach this host on HTTPS. Keep port 8080 bound to `127.0.0.1`; do not open it to the LAN or Internet. Use Serve, not Funnel. See the [Tailscale Serve documentation](https://tailscale.com/docs/reference/tailscale-cli/serve).
+   Open the reported HTTPS URL on your Mac or iPhone while connected to Tailscale. BT has no login, so the tailnet is the only access boundary. Configure tailnet grants so only your intended devices can reach this host on HTTPS. Keep port 8080 bound to `127.0.0.1`; do not open it to the LAN or Internet. Use Serve, not Funnel. See the [Tailscale Serve documentation](https://tailscale.com/docs/reference/tailscale-cli/serve).
 
 5. Test typed chat and a foreground voice session from each device. Restart BT, reopen the browser, and confirm the conversation is restored. Check readiness with an authenticated `GET /ready`; it returns 503 if the database cannot be read, Ollama is unreachable, or the selected model is missing. Run a 24-hour trial before depending on the service daily.
 
-The browser microphone needs HTTPS or localhost. iOS background/lock-screen listening and wake words are outside this release. Denying microphone permission leaves typed chat available. The shared token gives all admitted devices access to all conversations; this is not a multi-user service. Rotate the token and restart BT to revoke existing cookies.
+The browser microphone needs HTTPS or localhost. iOS background/lock-screen listening and wake words are outside this release. Denying microphone permission leaves typed chat available. Every device that can reach BT sees every conversation; this is not a multi-user service. To revoke a device, remove its tailnet access.
 
 ## Backups and restore
 
@@ -78,6 +77,6 @@ Run one Uvicorn process. Conversation leases and voice capacity live in that pro
 
 Voice streams locally and falls back to cloud if the provider fails before producing response text. A failure after text starts surfaces an error instead of replaying an answer you have partly heard. Voice models are prepared during startup; after disconnect they are loaded in a background thread for the next connection. Reconnect can therefore take several seconds. The client mutes microphone transmission until you hold the talk button and never resumes recording automatically after a network interruption.
 
-Keep `BT_DEVUI=0` in production. The `/` client works without developer routes. The old standalone dashboard is for localhost development; cross-origin access is intentionally rejected when using the authenticated server.
+Keep `BT_DEVUI=0` in production. The `/` client works without developer routes. The old standalone dashboard is for localhost development; BT rejects cross-origin requests, so the dashboard cannot reach a remote server.
 
 Local verification covers storage, HTTP/voice access, provider failure handling, backup restoration, queued-audio cancellation and reconnect state. NixOS module evaluation, real model throughput, device audio routes, reboot recovery and the 24-hour trial must run on the target server and devices.

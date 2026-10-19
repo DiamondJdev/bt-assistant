@@ -11,12 +11,6 @@ async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
   // Proxies and server crashes can return HTML or plain text.
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401) {
-    if (voice.wanted) disconnect();
-    $('login').hidden = false;
-    $('assistant').hidden = $('logout').hidden = true;
-    throw new Error('Unlock BT with your server access token.');
-  }
   if (!response.ok) {
     const detail = data.detail;
     if (detail?.session_id) saveSession(detail.session_id);
@@ -61,8 +55,7 @@ async function restoreHistory() {
 
 async function initialize() {
   const config = await api('/config');
-  $('login').hidden = true;
-  $('assistant').hidden = $('logout').hidden = false;
+  $('assistant').hidden = false;
   $('voice').disabled = !config.voice_enabled;
   $('voice').textContent = config.voice_enabled ? 'Connect voice' : 'Voice disabled on server';
   await refreshSessions();
@@ -73,22 +66,6 @@ async function initialize() {
   status('Ready.');
 }
 
-$('login').onsubmit = async event => {
-  event.preventDefault();
-  try {
-    await api('/auth/login', { method: 'POST', body: JSON.stringify({ token: $('token').value }) });
-    $('token').value = '';
-    await initialize();
-  } catch (error) { status(error.message); }
-};
-$('logout').onclick = async () => {
-  disconnect();
-  try { await api('/auth/logout', { method: 'POST' }); } catch (error) { status(error.message); }
-  $('log').replaceChildren();
-  $('sessions').replaceChildren();
-  $('login').hidden = false;
-  $('assistant').hidden = $('logout').hidden = true;
-};
 $('sessions').onchange = async () => {
   if (voice.wanted || sending) return;
   sessionId = $('sessions').value || null;

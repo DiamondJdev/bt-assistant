@@ -35,7 +35,7 @@ The text conversational core is ready for development use. The voice pipeline is
 - [x] Optional speech-to-text and text-to-speech pipeline
 - [x] Developer dashboard for live transcripts
 - [x] Browser client with typed chat, push-to-talk, saved sessions and reconnect
-- [x] Shared-token HTTP and WebSocket access
+- [x] Open HTTP and WebSocket access inside the tailnet, with a same-origin check
 - [x] NixOS service module and daily transcript backups
 - [ ] Native apps and external integrations
 
@@ -134,7 +134,7 @@ To enable the developer dashboard, set either `BT_DEVELOPER_MODE=1` or `BT_DEVUI
 
 ## Browser client and full-time server
 
-Open `/` on the running server. Set `BT_API_TOKEN` to a token generated with `openssl rand -hex 32`; the browser asks for it once. API clients send `Authorization: Bearer <token>`. Without a token, only direct loopback development requests are accepted. Network binds require a token.
+Open `/` on the running server. BT has no login: anyone who can reach it on your tailnet can use it, so it only binds to loopback or a Tailscale address. Requests from another website's origin are rejected. Native clients that send no `Origin` header are accepted.
 
 The client supports typed chat, saved conversations, foreground push-to-talk and automatic reconnect after a network drop. Voice needs `BT_VOICE=1` and HTTPS or localhost for microphone access. One device can use voice at a time. Disconnect voice to type in that conversation.
 
@@ -153,7 +153,6 @@ Copy [.env.example](.env.example) to `.env`; all options have sensible defaults 
 | `OPENAI_API_KEY` | Enables cloud escalation | none |
 | `BT_OPENAI_MODEL` | Cloud fallback model | `gpt-5.6-luna` |
 | `BT_HOST` | Server bind address (see [Remote access](#remote-access-over-tailscale)) | `127.0.0.1` |
-| `BT_API_TOKEN` | Shared secret for browser and API access | none (required; BT refuses to start without it) |
 | `BT_DB_PATH` | SQLite transcript database path | `bt.sqlite3` |
 | `BT_VOICE` | Enable voice mode when set to `1` | off |
 | `BT_DEVELOPER_MODE` | Enable developer tooling and dashboard when set to `1` | off |
@@ -168,7 +167,7 @@ BT normally uses Ollama. It escalates to the configured OpenAI model when you ex
 ## Project layout
 
 - `bt/client/` — browser chat, push-to-talk and saved conversations
-- `bt/gateway/` — HTTP gateway, shared-token access and health endpoints
+- `bt/gateway/` — HTTP gateway, same-origin check and health endpoints
 - `bt/llm/` — local/cloud model routing
 - `bt/voice/`, `bt/stt/`, and `bt/tts/` — optional voice pipeline
 - `bt/transcript/` — SQLite-backed sessions and turns

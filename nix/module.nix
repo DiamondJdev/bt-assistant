@@ -13,7 +13,7 @@ in {
     environmentFile = lib.mkOption {
       type = lib.types.str;
       default = "/etc/bt.env";
-      description = "Root-owned mode-0600 file containing BT_API_TOKEN and optional provider settings.";
+      description = "Optional root-owned mode-0600 file with provider settings and secrets.";
     };
   };
 
@@ -39,17 +39,11 @@ in {
         LD_LIBRARY_PATH = lib.makeLibraryPath runtime;
         PYTHONUNBUFFERED = "1";
       };
-      preStart = ''
-        if [ -z "''${BT_API_TOKEN:-}" ]; then
-          echo "Set BT_API_TOKEN in ${cfg.environmentFile}" >&2
-          exit 1
-        fi
-      '';
       serviceConfig = {
         User = "bt";
         Group = "bt";
         WorkingDirectory = cfg.projectDir;
-        EnvironmentFile = cfg.environmentFile;
+        EnvironmentFile = "-${cfg.environmentFile}";
         ExecStart = "${cfg.projectDir}/.venv/bin/bt";
         Restart = "on-failure";
         RestartSec = 5;

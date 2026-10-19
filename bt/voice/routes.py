@@ -53,7 +53,7 @@ async def _run_session(websocket: WebSocket, state: State, store: TranscriptStor
 
 @router.websocket("/voice/ws")
 async def voice_ws(websocket: WebSocket, session_id: str | None = None) -> None:
-	# AccessMiddleware has already checked the token and origin.
+	# OriginMiddleware has already rejected cross-site connections.
 	await websocket.accept()
 	state = websocket.app.state
 	store = get_store()
