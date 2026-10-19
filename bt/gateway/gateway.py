@@ -62,7 +62,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
 		await asyncio.to_thread(store.add_turn, session_id, "user", req.text, input_mode="text")
 		history = await asyncio.to_thread(store.as_chat_messages, session_id)
 		ctx = default_context(session_id, "text") if CONFIG.tools_enabled else None
-		result = await respond(history, req.text, ctx=ctx)
+		result = await respond(history, req.text, ctx=ctx, session_id=session_id)
 		if not result:
 			raise RuntimeError("LLM did not return a response")
 		await asyncio.to_thread(store.add_turn, session_id, "bt", result.text, compute=result.compute)

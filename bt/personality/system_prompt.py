@@ -20,6 +20,7 @@ log = logging.getLogger("bt.personality")
 SOUL_PATH = Path(__file__).with_name("SOUL.md")
 TOOLS_MARKER = "<!-- bt:tools -->"
 CONTEXT_MARKER = "<!-- bt:context -->"
+NO_TOOLS = "No tools are available."
 
 _SOUL: str | None = None
 
@@ -35,12 +36,14 @@ def render_system_prompt(
 	surface: str = "text",
 	tools: Sequence[str] | None = None,
 	context: Sequence[str] | None = None,
+	session_id: str | None = None,
+	turns: int | None = None,
 ) -> str:
 	if tools is None:
 		tools = _tool_lines(surface)
 	if context is None:
-		context = situation(surface)
-	return _soul().replace(TOOLS_MARKER, "\n".join(tools)).replace(
+		context = situation(surface, session_id, turns)
+	return _soul().replace(TOOLS_MARKER, "\n".join(tools) or NO_TOOLS).replace(
 		CONTEXT_MARKER, "\n".join(context)
 	)
 
@@ -55,7 +58,7 @@ def _tool_lines(surface: str) -> list[str]:
 	return manifest_lines(surface)
 
 # This populates situation context without requiring a full tool-call
-def situation(surface: str) -> list[str]:
+def situation(surface: str, session_id: str | None = None, turns: int | None = None) -> list[str]:
 	now = datetime.now().astimezone()
 	lines = [
 		f"The current date and time is {now.strftime('%H:%M on %A, %d %B %Y')}, "
@@ -66,6 +69,10 @@ def situation(surface: str) -> list[str]:
 		if surface == "voice"
 		else "This turn is delivered as text, not spoken.",
 	]
+	if CONFIG.operator_name:
+		lines.append(f"Your operator is {CONFIG.operator_name}.")
+	if session_id:
+		lines.append(f"Session {session_id}, turn {turns}." if turns else f"Session {session_id}.")
 
 	for line in _memory_lines():
 		lines.append(line)

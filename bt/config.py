@@ -44,6 +44,9 @@ class Config:
 	whisper_model: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_MODEL", "small.en"))
 	whisper_device: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_DEVICE", "auto"))
 
+	# Operator's name, given to BT as a runtime fact when set.
+	operator_name: str | None = field(default_factory=lambda: os.environ.get("BT_OPERATOR_NAME") or None)
+
 	# Storage (SQLite)
 	db_path: str = field(default_factory=lambda: os.environ.get("BT_DB_PATH", "bt.sqlite3"))
 

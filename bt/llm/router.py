@@ -93,6 +93,10 @@ def _looks_degenerate(reply: str | None, user_text: str) -> bool:
 	return stripped in ("i don't know", "i do not know", "i don't understand")
 
 
+def _user_turns(messages: list[Any]) -> int:
+	return sum(1 for m in messages if m.get("role") == "user")
+
+
 # Checks for user request for escalation
 def _wants_escalation(user_text: str) -> bool:
 	lowered = user_text.lower()
@@ -108,6 +112,7 @@ async def respond(
 	user_text: str,
 	provider: str | None = None,
 	ctx: ToolContext | None = None,
+	session_id: str | None = None,
 ) -> LLMResponse | None:
 	escalated = provider == "cloud" or _wants_escalation(user_text)
 	if escalated:
@@ -115,7 +120,7 @@ async def respond(
 
 	current = _provider("openai" if escalated else "ollama")
 	working: list[Any] = [
-		{"role": "system", "content": render_system_prompt(surface="text")},
+		{"role": "system", "content": render_system_prompt(surface="text", session_id=session_id, turns=_user_turns(messages))},
 		*messages,
 	]
 	tools = openai_tools() if ctx is not None and CONFIG.tools_enabled else None

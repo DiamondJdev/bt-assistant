@@ -45,6 +45,25 @@ VAD_PARAMS = VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.6, min_volume
 
 NO_SPEECH_PROB = 0.5 # Probability threshold for false positives in STT. Lower is more sensitive
 
+class FreshPromptLLMService(OLLamaLLMService):
+	# Re-renders the prompt before every inference so time and turn never go stale.
+	def __init__(self, session_id: str) -> None:
+		super().__init__(
+			base_url=CONFIG.ollama_url("v1"),
+			settings=OLLamaLLMService.Settings(
+				model=CONFIG.ollama_model,
+				system_instruction=render_system_prompt(surface="voice", session_id=session_id),
+			),
+		)
+		self.session_id = session_id
+
+	async def get_chat_completions(self, context: LLMContext):
+		turns = sum(1 for m in context.get_messages() if m.get("role") == "user")
+		# Pipecat reads system_instruction on each request; it has no public per-turn hook.
+		self._settings.system_instruction = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
+		return await super().get_chat_completions(context)
+
+
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
 
@@ -72,13 +91,7 @@ def build_worker(
 			no_speech_prob=NO_SPEECH_PROB,
 		),
 	)
-	llm = OLLamaLLMService(
-		base_url=CONFIG.ollama_url("v1"),
-		settings=OLLamaLLMService.Settings(
-			model=CONFIG.ollama_model,
-			system_instruction=render_system_prompt(surface="voice"),
-		),
-	)
+	llm = FreshPromptLLMService(session_id)
 	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")]) # Filter out thinking from TTS responses to clients
 	tools = pipecat_tools() if CONFIG.tools_enabled else None
