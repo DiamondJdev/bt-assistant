@@ -106,9 +106,9 @@ class TranscriptStore:
 		with self._lock:
 			rows = self._conn.execute(
 				"""SELECT id, session_id, ts, role, text, input_mode, compute
-						FROM turns WHERE session_id = ? ORDER BY ts ASC LIMIT ?""", (session_id, limit),
+						FROM turns WHERE session_id = ? ORDER BY ts DESC LIMIT ?""", (session_id, limit),
 			).fetchall()
-		return [Turn(*row) for row in rows]
+		return [Turn(*row) for row in reversed(rows)]
 
 	# Same as history(), but formatted for an LLM chat call (role/content only)
 	def as_chat_messages(self, session_id: str, limit: int = 50) -> list[LLMContextMessage]:

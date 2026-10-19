@@ -8,6 +8,7 @@ __pycache__/
 result
 *env*
 !.env.example
+.DS_Store
 
 # Memory files: personal facts written by the model, never reviewed before commit
 memory/

@@ -111,7 +111,7 @@ def _user_turns(messages: list[Any]) -> int:
 
 
 # Checks for user request for escalation
-def _wants_escalation(user_text: str) -> bool:
+def wants_escalation(user_text: str) -> bool:
 	lowered = user_text.lower()
 	return any(phrase.lower() in lowered for phrase in ESCALATION_PHRASES)
 
@@ -127,7 +127,7 @@ async def respond(
 	ctx: ToolContext | None = None,
 	session_id: str | None = None,
 ) -> LLMResponse | None:
-	escalated = provider == "cloud" or _wants_escalation(user_text)
+	escalated = provider == "cloud" or wants_escalation(user_text)
 	if escalated:
 		log.info("starting on the cloud model")
 

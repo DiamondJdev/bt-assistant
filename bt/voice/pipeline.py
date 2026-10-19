@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.pipeline.llm_switcher import LLMSwitcher
 from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.service_switcher import ServiceSwitcherStrategyFailover
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
 from pipecat.processors.frameworks.rtvi import (
@@ -22,7 +24,9 @@ from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
 )
+from pipecat.services.llm_service import LLMService
 from pipecat.services.ollama.llm import OLLamaLLMService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.piper.tts import PiperTTSService
 from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transports.websocket.fastapi import (
@@ -36,6 +40,7 @@ from bt.personality.system_prompt import render_system_prompt
 from bt.tools.registry import default_context, pipecat_tools
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
+from bt.voice.routing import EscalationRouter
 from bt.voice.serializer import JSONFrameSerializer
 
 SAMPLE_RATE = 16_000
@@ -45,16 +50,10 @@ VAD_PARAMS = VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.6, min_volume
 
 NO_SPEECH_PROB = 0.5 # Probability threshold for false positives in STT. Lower is more sensitive
 
-class FreshPromptLLMService(OLLamaLLMService):
+class _FreshPrompt:
 	# Re-renders the prompt before every inference so time and turn never go stale.
-	def __init__(self, session_id: str) -> None:
-		super().__init__(
-			base_url=CONFIG.ollama_url("v1"),
-			settings=OLLamaLLMService.Settings(
-				model=CONFIG.ollama_model,
-				system_instruction=render_system_prompt(surface="voice", session_id=session_id),
-			),
-		)
+	def __init__(self, session_id: str, **kwargs) -> None:
+		super().__init__(**kwargs)
 		self.session_id = session_id
 
 	async def get_chat_completions(self, context: LLMContext):
@@ -63,6 +62,14 @@ class FreshPromptLLMService(OLLamaLLMService):
 		self._base_system_instruction = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
 		self._compose_system_instruction()
 		return await super().get_chat_completions(context)
+
+
+class FreshOllamaLLMService(_FreshPrompt, OLLamaLLMService):
+	pass
+
+
+class FreshOpenAILLMService(_FreshPrompt, OpenAILLMService):
+	pass
 
 
 def _vad() -> SileroVADAnalyzer:
@@ -92,7 +99,27 @@ def build_worker(
 			no_speech_prob=NO_SPEECH_PROB,
 		),
 	)
-	llm = FreshPromptLLMService(session_id)
+	system = render_system_prompt(surface="voice", session_id=session_id)
+	local_llm = FreshOllamaLLMService(
+		session_id,
+		base_url=CONFIG.ollama_url("v1"),
+		settings=OLLamaLLMService.Settings(model=CONFIG.ollama_model, system_instruction=system),
+	)
+	compute_labels: dict[LLMService, str] = {local_llm: "ollama"}
+	cloud_llm = None
+	if CONFIG.openai_api_key:
+		cloud_llm = FreshOpenAILLMService(
+			session_id,
+			api_key=CONFIG.openai_api_key,
+			settings=OpenAILLMService.Settings(
+				model=CONFIG.openai_model,
+				system_instruction=system,
+				max_completion_tokens=1024,
+			),
+		)
+		compute_labels[cloud_llm] = "openai"
+	llm = LLMSwitcher(llms=list(compute_labels), strategy_type=ServiceSwitcherStrategyFailover)
+	router = EscalationRouter(llm, local_llm, cloud_llm)
 	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")]) # Filter out thinking from TTS responses to clients
 	tools = pipecat_tools() if CONFIG.tools_enabled else None
@@ -115,6 +142,7 @@ def build_worker(
 		transport.input(),
 		stt,
 		aggregators.user(),
+		router,
 		llm,
 		tts,
 		transport.output(),
@@ -135,5 +163,5 @@ def build_worker(
 		rtvi_observer_params=RTVIObserverParams(
 			function_call_report_level={"*": RTVIFunctionCallReportLevel.FULL},
 		),
-		observers=[TranscriptObserver(get_store(), session_id)],
+		observers=[TranscriptObserver(get_store(), session_id, compute_labels)],
 	)
