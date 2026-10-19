@@ -76,11 +76,16 @@ def _provider(key: str) -> Provider:
 
 # Returns the whole assistant message including tool calls
 async def _complete(
-	provider: Provider, messages: list[Any], tools: list[dict[str, Any]] | None = None
+	provider: Provider,
+	messages: list[Any],
+	tools: list[dict[str, Any]] | None = None,
+	tool_choice: str | None = None,
 ):
 	kwargs: dict[str, Any] = {"model": provider.model, "messages": messages}
 	if tools:
 		kwargs["tools"] = tools
+		if tool_choice:
+			kwargs["tool_choice"] = tool_choice
 	if provider.key == "openai":
 		kwargs["max_completion_tokens"] = MAX_TOKENS
 	else:
@@ -163,7 +168,8 @@ async def respond(
 				})
 
 		log.warning("tool budget spent after %d rounds, answering without tools", MAX_TOOL_ITERATIONS)
-		return _result(await _complete(current, working), current, ctx)
+		# Tools stay declared so the tool turns above remain valid; "none" forces prose.
+		return _result(await _complete(current, working, tools, tool_choice="none"), current, ctx)
 	except Exception as exc:
 		log.exception("Unexpected error during LLM response: %s", exc)
 		raise
@@ -187,8 +193,11 @@ def _assistant_turn(message) -> dict[str, Any]:
 
 
 def _result(message, provider: Provider, ctx: ToolContext | None) -> LLMResponse:
+	text = strip_thinking(message.content)
+	if not text:
+		raise ValueError(f"{provider.key} returned an empty reply")
 	return LLMResponse(
-		text=strip_thinking(message.content),
+		text=text,
 		compute=provider.key,
 		tools_used=tuple(ctx.used) if ctx else (),
 	)

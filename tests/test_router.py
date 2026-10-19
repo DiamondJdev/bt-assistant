@@ -86,3 +86,25 @@ def test_provider_clients_have_bounded_timeout(providers):
     for key in ('ollama', 'openai'):
         client = router._provider(key).client
         assert client.timeout == router.LLM_TIMEOUT_SECS and client.max_retries == 1
+
+
+def test_tool_budget_final_call_forbids_more_tools(providers, monkeypatch):
+    async def dispatch(name, arguments, ctx):
+        return 'nothing'
+    monkeypatch.setattr(router, 'dispatch_call', dispatch)
+    call = SimpleNamespace(id='c1', function=SimpleNamespace(name='memory_search', arguments='{}'))
+    seen = []
+    async def complete(provider, messages, tools=None, tool_choice=None):
+        seen.append((tools, tool_choice))
+        return _reply('Done.') if tool_choice == 'none' else _reply(None, [call])
+    monkeypatch.setattr(router, '_complete', complete)
+    monkeypatch.setattr(router, 'openai_tools', lambda: [{'type': 'function'}])
+    result = asyncio.run(router.respond([], 'loop', ctx=SimpleNamespace(used=[])))
+    assert result.text == 'Done.'
+    assert seen[-1] == ([{'type': 'function'}], 'none')
+
+
+def test_empty_cloud_reply_raises(providers):
+    providers(openai=[_reply('<think>only thoughts</think>')])
+    with pytest.raises(ValueError):
+        asyncio.run(router.respond([], 'escalate'))

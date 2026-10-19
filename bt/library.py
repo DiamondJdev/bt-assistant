@@ -107,8 +107,9 @@ def _fuzzy_score(memory: Memory, words: list[str]) -> int:
 
 class MemoryStore:
 	def __init__(self, root: str | Path) -> None:
+		# Created on first write, so a missing or read-only dir only breaks writes.
 		self._root = Path(root).resolve()
-		self._root.mkdir(parents=True, exist_ok=True)
+		self._cache: tuple[tuple, list[Memory]] = ((), [])
 
 	def _path(self, name: str) -> Path:
 		path = (self._root / f"{slugify(name)}.md").resolve()
@@ -137,7 +138,12 @@ class MemoryStore:
 		)
 
 	def _all(self) -> list[Memory]:
-		return [m for m in (self._load(p) for p in self._files()) if m is not None]
+		# Re-parse only when a file is added, removed or edited; the prompt reads this every turn.
+		files = self._files()
+		key = tuple((p.name, p.stat().st_mtime_ns) for p in files)
+		if key != self._cache[0]:
+			self._cache = (key, [m for m in (self._load(p) for p in files) if m is not None])
+		return self._cache[1]
 
 	def read(self, name: str) -> Memory | None:
 		path = self._path(name)
@@ -150,6 +156,7 @@ class MemoryStore:
 			raise ValueError("a memory needs a description")
 
 		path = self._path(name)
+		self._root.mkdir(parents=True, exist_ok=True)
 		memory = Memory(
 			name=path.stem,
 			description=" ".join(description.split()),

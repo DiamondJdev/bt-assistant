@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -24,21 +23,20 @@ VOICE_SKILL_CHARS = 2000
 
 # ------------------------------ enviroment processing ----------------------------------
 
-# Only what changes within a session lives here. The host, the OS, the model and
-# the operator are constant for the session and are injected into the system
-# prompt instead, so BT does not spend a round trip learning what it was told.
+# Only live machine state lives here. The time, host, OS, model and operator are
+# injected into the system prompt every turn, so BT does not spend a round trip
+# learning what it was told.
 @tool(
 	name="environment_report",
 	description=(
-		"Report the current date and time and the live state of the machine BT runs "
-		"on: uptime, free memory, free disk, and whether the local model is reachable."
+		"Report the live state of the machine BT runs on: uptime, free memory, "
+		"free disk, and whether the local model is reachable."
 	),
-	manifest="You can report the current time and the live state of the machine with environment_report.",
+	manifest="You can report the live state of the machine with environment_report.",
 	timeout_secs=5.0,
 )
 async def environment_report(ctx: ToolContext) -> str:
-	now = datetime.now().astimezone()
-	parts = [f"It is {now.strftime('%H:%M on %A, %d %B %Y')}, timezone {now.tzname()}."]
+	parts: list[str] = []
 
 	uptime = _uptime()
 	if uptime:

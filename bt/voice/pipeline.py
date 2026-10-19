@@ -59,8 +59,9 @@ class FreshPromptLLMService(OLLamaLLMService):
 
 	async def get_chat_completions(self, context: LLMContext):
 		turns = sum(1 for m in context.get_messages() if m.get("role") == "user")
-		# Pipecat reads system_instruction on each request; it has no public per-turn hook.
-		self._settings.system_instruction = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
+		# No public per-turn hook: set pipecat's base and recompose so addons and later recomposes keep it.
+		self._base_system_instruction = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
+		self._compose_system_instruction()
 		return await super().get_chat_completions(context)
 
 
