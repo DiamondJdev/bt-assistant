@@ -45,6 +45,7 @@ class Config:
 	whisper_device: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_DEVICE", "auto"))
 
 	host: str = field(default_factory=lambda: os.environ.get("BT_HOST", "127.0.0.1"))
+	api_token: str = field(default_factory=lambda: os.environ.get("BT_API_TOKEN", ""))
 
 	# Storage (SQLite)
 	db_path: str = field(default_factory=lambda: os.environ.get("BT_DB_PATH", "bt.sqlite3"))
@@ -56,6 +57,10 @@ class Config:
 	# Developer toolings
 	developer_mode: bool = field(default_factory=lambda: _env_flag("BT_DEVELOPER_MODE"))
 	dev_ui_enabled: bool = field(default_factory=_dev_ui_default)
+
+	def validate_access(self) -> None:
+		if self.host not in {"127.0.0.1", "::1", "localhost"} and not self.api_token:
+			raise ValueError("Set BT_API_TOKEN before binding to a network interface")
 
 	# Ollama serves a native API at /api and an OpenAI-compatible one at /v1.
 	# Callers pick the path so BT_OLLAMA_URL stays the only host setting.

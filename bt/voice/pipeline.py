@@ -11,20 +11,13 @@ from __future__ import annotations
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.pipeline.llm_switcher import LLMSwitcher
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.service_switcher import ServiceSwitcherStrategyFailover
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
 from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
 )
-from pipecat.services.llm_service import LLMService
-from pipecat.services.ollama.llm import OLLamaLLMService
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.piper.tts import PiperTTSService
-from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transports.websocket.fastapi import (
 	FastAPIWebsocketParams,
 	FastAPIWebsocketTransport,
@@ -35,7 +28,7 @@ from bt.config import CONFIG
 from bt.personality.system_prompt import SYSTEM_PROMPT
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
-from bt.voice.routing import EscalationRouter
+from bt.voice.routing import RoutedLLMService
 from bt.voice.serializer import JSONFrameSerializer
 
 SAMPLE_RATE = 16_000
@@ -48,10 +41,22 @@ NO_SPEECH_PROB = 0.5 # Probability threshold for false positives in STT. Lower i
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
 
-# Constructs the voice pipeline for a single session (VAD->STT->LLM->TTS).
-def build_worker(
-	websocket, session_id: str, history: list[LLMContextMessage] | None = None
-) -> PipelineWorker:
+def create_speech_services():
+	# Model loading runs outside the event loop, before accepting voice traffic.
+	from pipecat.services.whisper.stt import WhisperSTTService
+	from pipecat.services.piper.tts import PiperTTSService
+
+	stt = WhisperSTTService(
+		device=CONFIG.whisper_device,
+		compute_type=CONFIG.whisper_compute_type,
+		settings=WhisperSTTService.Settings(model=CONFIG.whisper_model, no_speech_prob=NO_SPEECH_PROB),
+	)
+	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
+	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")])
+	return stt, tts
+
+
+def build_worker(websocket, session_id: str, history, speech_services, on_disconnect) -> PipelineWorker:
 	transport = FastAPIWebsocketTransport(
 		websocket=websocket,
 		params=FastAPIWebsocketParams(
@@ -64,37 +69,12 @@ def build_worker(
 		),
 	)
 
-	stt = WhisperSTTService(
-		device=CONFIG.whisper_device,
-		compute_type=CONFIG.whisper_compute_type,
-		settings=WhisperSTTService.Settings(
-			model=CONFIG.whisper_model,
-			no_speech_prob=NO_SPEECH_PROB,
-		),
-	)
-	local_llm = OLLamaLLMService(
-		base_url=CONFIG.ollama_url("v1"),
-		settings=OLLamaLLMService.Settings(
-			model=CONFIG.ollama_model,
-			system_instruction=SYSTEM_PROMPT,
-		),
-	)
-	compute_labels: dict[LLMService, str] = {local_llm: "ollama"}
-	cloud_llm = None
-	if CONFIG.openai_api_key:
-		cloud_llm = OpenAILLMService(
-			api_key=CONFIG.openai_api_key,
-			settings=OpenAILLMService.Settings(
-				model=CONFIG.openai_model,
-				system_instruction=SYSTEM_PROMPT,
-				max_completion_tokens=1024,
-			),
-		)
-		compute_labels[cloud_llm] = "openai"
-	llm = LLMSwitcher(llms=list(compute_labels), strategy_type=ServiceSwitcherStrategyFailover)
-	router = EscalationRouter(llm, local_llm, cloud_llm)
-	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
-	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")]) # Filter out thinking from TTS responses to clients
+	@transport.event_handler("on_client_disconnected")
+	async def disconnected(*_args):
+		await on_disconnect()
+
+	stt, tts = speech_services
+	llm = RoutedLLMService()
 	# Conversation history
 	context = LLMContext(messages=history or [])
 
@@ -109,7 +89,6 @@ def build_worker(
 		transport.input(),
 		stt,
 		aggregators.user(),
-		router,
 		llm,
 		tts,
 		transport.output(),
@@ -125,5 +104,5 @@ def build_worker(
 			audio_in_sample_rate=SAMPLE_RATE,
 			audio_out_sample_rate=SAMPLE_RATE,
 		),
-		observers=[TranscriptObserver(get_store(), session_id, compute_labels)],
+		observers=[TranscriptObserver(get_store(), session_id, {llm: "ollama"})],
 	)

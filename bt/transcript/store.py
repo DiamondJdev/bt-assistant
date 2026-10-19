@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -61,9 +62,44 @@ class TranscriptStore:
 		# pipeline), so every statement below runs under _lock. WAL lets readers
 		# proceed while a write is in flight.
 		self._lock = threading.Lock()
+		self._busy: set[str] = set()
+		self._conn.execute("PRAGMA foreign_keys=ON")
 		self._conn.execute("PRAGMA journal_mode=WAL")
 		self._conn.executescript(SCHEMA)
 		self._conn.commit()
+
+	def close(self) -> None:
+		with self._lock:
+			self._conn.close()
+
+	@contextmanager
+	def conversation(self, session_id: str):
+		# shortcut: leases are process-local; run one server worker.
+		with self._lock:
+			self._require_session(session_id)
+			if session_id in self._busy:
+				raise RuntimeError("Conversation is busy")
+			self._busy.add(session_id)
+		try:
+			yield
+		finally:
+			with self._lock:
+				self._busy.discard(session_id)
+
+	def _require_session(self, session_id: str) -> None:
+		if not self._conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone():
+			raise KeyError(session_id)
+
+	def list_sessions(self) -> list[dict]:
+		with self._lock:
+			rows = self._conn.execute("""
+				SELECT s.id, COALESCE(s.label,
+					(SELECT substr(text, 1, 80) FROM turns WHERE session_id=s.id ORDER BY ts, rowid LIMIT 1),
+					'New conversation'),
+				COALESCE((SELECT MAX(ts) FROM turns WHERE session_id=s.id), s.started_at) AS updated
+				FROM sessions s ORDER BY updated DESC LIMIT 50
+			""").fetchall()
+		return [dict(id=row[0], label=row[1], updated_at=row[2]) for row in rows]
 
 	def new_session(self, label: str | None = None) -> str:
 		session_id = str(uuid.uuid4())
@@ -104,9 +140,10 @@ class TranscriptStore:
 	# Returns the most recent 'limit' turns for a given session with session id equal to 'session_id'
 	def history(self, session_id: str, limit: int = 200) -> list[Turn]:
 		with self._lock:
+			self._require_session(session_id)
 			rows = self._conn.execute(
 				"""SELECT id, session_id, ts, role, text, input_mode, compute
-						FROM turns WHERE session_id = ? ORDER BY ts DESC LIMIT ?""", (session_id, limit),
+						FROM turns WHERE session_id = ? ORDER BY ts DESC, rowid DESC LIMIT ?""", (session_id, limit),
 			).fetchall()
 		return [Turn(*row) for row in reversed(rows)]
 

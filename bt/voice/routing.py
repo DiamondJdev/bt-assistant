@@ -1,43 +1,62 @@
-"""
-Per-turn local/cloud routing for the voice pipeline.
-"""
+"""Local-first streaming with fallback before the first response token."""
 
-from __future__ import annotations
+import asyncio
 
-from pipecat.frames.frames import Frame, LLMContextFrame, ManuallySwitchServiceFrame
-from pipecat.pipeline.llm_switcher import LLMSwitcher
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pipecat.services.llm_service import LLMService
+from pipecat.services.ollama.llm import OLLamaLLMService
+from pipecat.services.openai.llm import OpenAILLMService
 
+from bt.config import CONFIG
 from bt.llm.router import wants_escalation
+from bt.personality.system_prompt import SYSTEM_PROMPT
 
 
-def _last_user_text(context: LLMContext) -> str:
-	for message in reversed(context.get_messages()):
-		if message.get("role") != "user":
-			continue
-		content = message.get("content")
-		if isinstance(content, str):
-			return content
-		return " ".join(p.get("text", "") for p in content or [] if isinstance(p, dict))
-	return ""
+class RoutedLLMService(OLLamaLLMService):
+    def __init__(self):
+        super().__init__(
+            base_url=CONFIG.ollama_url('v1'),
+            settings=self.Settings(model=CONFIG.ollama_model, system_instruction=SYSTEM_PROMPT),
+        )
+        self.compute = 'ollama'
+        self._cloud = OpenAILLMService(
+            api_key=CONFIG.openai_api_key,
+            settings=OpenAILLMService.Settings(model=CONFIG.openai_model, system_instruction=SYSTEM_PROMPT, max_completion_tokens=1024),
+        ) if CONFIG.openai_api_key else None
 
+    async def get_chat_completions(self, context):
+        context.set_messages(context.get_messages()[-50:])
+        user_text = next((m.get('content', '') for m in reversed(context.get_messages()) if m.get('role') == 'user'), '')
+        use_cloud = isinstance(user_text, str) and wants_escalation(user_text)
 
-class EscalationRouter(FrameProcessor):
-	def __init__(self, switcher: LLMSwitcher, local: LLMService, cloud: LLMService | None) -> None:
-		super().__init__()
-		self._local = local
-		self._cloud = cloud
-		self._requested: LLMService = switcher.strategy.active_service  # type: ignore[assignment]
+        async def chunks():
+            providers = [self._cloud] if use_cloud else [self, self._cloud]
+            for provider in providers:
+                if provider is None:
+                    raise RuntimeError('Cloud fallback requires OPENAI_API_KEY')
+                stream = None
+                emitted = False
+                self.compute = 'ollama' if provider is self else 'openai'
+                try:
+                    async with asyncio.timeout(60):
+                        stream = await (super(RoutedLLMService, self).get_chat_completions(context) if provider is self else provider.get_chat_completions(context))
+                        async for chunk in stream:
+                            if chunk.choices and chunk.choices[0].delta.content:
+                                emitted = True
+                            yield chunk
+                    if not emitted:
+                        raise ValueError('Provider returned an empty response')
+                    return
+                except Exception:
+                    # Retrying after speech starts would repeat a partial answer.
+                    if emitted or provider is not self or self._cloud is None:
+                        raise
+                finally:
+                    if stream is not None:
+                        await stream.close()
+        return chunks()
 
-	async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
-		await super().process_frame(frame, direction)
-
-		if isinstance(frame, LLMContextFrame) and self._cloud is not None:
-			target = self._cloud if wants_escalation(_last_user_text(frame.context)) else self._local
-			if target is not self._requested:
-				self._requested = target
-				await self.push_frame(ManuallySwitchServiceFrame(service=target), direction)
-
-		await self.push_frame(frame, direction)
+    async def cleanup(self):
+        await super().cleanup()
+        await self._client.close()
+        if self._cloud is not None:
+            await self._cloud.cleanup()
+            await self._cloud._client.close()

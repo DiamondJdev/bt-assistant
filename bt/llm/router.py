@@ -65,7 +65,10 @@ async def _call_ollama(messages: list[LLMContextMessage]) -> str:
 		resp = await client.post(CONFIG.ollama_url("/api/chat"), json=payload)
 		resp.raise_for_status()
 		data = resp.json()
-		return strip_thinking(data["message"]["content"])
+		content = data["message"]["content"]
+		if not isinstance(content, str):
+			raise ValueError("Ollama response must contain text")
+		return strip_thinking(content)
 
 
 async def _call_openai(messages: list[LLMContextMessage]) -> str:
@@ -75,12 +78,12 @@ async def _call_openai(messages: list[LLMContextMessage]) -> str:
 		)
 	import openai
 
-	client = openai.AsyncOpenAI(api_key=CONFIG.openai_api_key)
-	resp = await client.chat.completions.create(
-		model=CONFIG.openai_model,
-		max_completion_tokens=1024,
-		messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],  # type: ignore
-	)
+	async with openai.AsyncOpenAI(api_key=CONFIG.openai_api_key, timeout=60, max_retries=1) as client:
+		resp = await client.chat.completions.create(
+			model=CONFIG.openai_model,
+			max_completion_tokens=1024,
+			messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],  # type: ignore
+		)
 	# Checks for malformed response from API
 	if not resp.choices or not resp.choices[0].message or not resp.choices[0].message.content:
 		raise RuntimeError("OpenAI response missing choices or message")
@@ -89,28 +92,17 @@ async def _call_openai(messages: list[LLMContextMessage]) -> str:
 # Respond to a user message, using either the local Ollama model or the cloud OpenAI model
 #
 # message is prior chat history plus latest user input, in role/content form
-async def respond(messages: list[LLMContextMessage], user_text: str, provider: str | None = "local") -> LLMResponse | None:
-	provider = provider or "local"
-
-	if wants_escalation(user_text):
-		log.info("user requested escalation, calling cloud")
-		provider = "cloud"
-
-	try:
-		if provider == "local":
+async def respond(messages: list[LLMContextMessage], user_text: str, provider: str | None = "local") -> LLMResponse:
+	if provider not in {None, "local", "cloud"}:
+		raise ValueError("Unknown provider")
+	if provider != "cloud" and not wants_escalation(user_text):
+		try:
 			local_response = await _call_ollama(messages)
-			if _looks_degenerate(local_response, user_text):
-				log.warning("local response looks degenerate, escalating to cloud")
-				provider = "cloud"
-			else:
+			if not _looks_degenerate(local_response, user_text):
 				return LLMResponse(text=local_response, compute="ollama")
-
-		if provider == "cloud":
-			cloud_response = await _call_openai(messages)
-			return LLMResponse(text=cloud_response, compute="openai")
-	except httpx.HTTPError as exc:
-		log.warning("ollama call failed (%s), escalating to cloud", exc)
-		return await respond(messages, user_text, "cloud") # call for another attempt with cloud provider
-	except Exception as exc:
-		log.exception("Unexpected error during LLM response: %s", exc)
-		raise
+		except (httpx.HTTPError, ValueError, KeyError, TypeError):
+			log.warning("Local response failed; trying cloud", exc_info=True)
+	cloud_response = await _call_openai(messages)
+	if not cloud_response:
+		raise ValueError("Cloud response is empty")
+	return LLMResponse(text=cloud_response, compute="openai")
