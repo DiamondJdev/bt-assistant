@@ -33,7 +33,9 @@ export class VoiceConnection {
       if (this.socket !== socket) return;
       clearTimeout(this.timer);
       this.socket = null;
-      if (!this.wanted || (!timedOut && [1000, 1008, 1011, 1013].includes(event.code))) {
+      // After a drop the server may still hold the old session briefly, so busy (1013) retries.
+      const busyAfterDrop = event.code === 1013 && this.attempt > 0;
+      if (!this.wanted || (!timedOut && !busyAfterDrop && [1000, 1008, 1011, 1013].includes(event.code))) {
         this.wanted = false;
         this.onState('disconnected', event.reason);
         return;

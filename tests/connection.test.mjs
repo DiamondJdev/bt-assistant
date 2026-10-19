@@ -60,3 +60,24 @@ test('connection timeout retries rather than leaving voice stuck', t => {
   assert.equal(sockets.length, 2);
   connection.stop();
 });
+
+test('busy rejection after a drop keeps retrying until the old session clears', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const sockets = [];
+  const original = globalThis.WebSocket;
+  globalThis.WebSocket = class { constructor() { sockets.push(this); } close() {} };
+  t.after(() => { globalThis.WebSocket = original; });
+  const connection = new VoiceConnection(() => 'test', () => {}, () => {});
+  connection.start();
+  sockets[0].onclose({ code: 1013 });
+  assert.equal(connection.wanted, false);
+  connection.start();
+  sockets[1].onmessage({ data: '{"type":"ready"}' });
+  sockets[1].onclose({ code: 1006 });
+  t.mock.timers.tick(1000);
+  sockets[2].onclose({ code: 1013 });
+  assert.equal(connection.wanted, true);
+  t.mock.timers.tick(2000);
+  assert.equal(sockets.length, 4);
+  connection.stop();
+});

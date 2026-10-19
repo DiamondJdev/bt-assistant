@@ -41,13 +41,14 @@ def test_voice_rejects_missing_token_and_wrong_origin(client):
         assert exc.value.code == 1008
 
 
-def test_voice_holds_conversation_lease_and_limits_connections(client):
+def test_voice_holds_conversation_lease_and_limits_connections(client, monkeypatch):
     login(client)
     sid = client.post('/sessions').json()['session_id']
-    gateway.app.state.voice_services = ()
+    monkeypatch.setattr(routes, 'create_speech_services', lambda: ())
     with client.websocket_connect(f'wss://testserver/voice/ws?session_id={sid}') as ws:
         assert ws.receive_json()['sessionId'] == sid
-        assert ws.receive_json()['type'] == 'ready'
+        while ws.receive_json()['type'] != 'ready':
+            pass
         assert client.post('/chat', json={'text': 'hello', 'session_id': sid}).status_code == 409
         with client.websocket_connect('wss://testserver/voice/ws') as other:
             with pytest.raises(WebSocketDisconnect) as exc:
@@ -72,3 +73,33 @@ def test_failed_voice_setup_releases_capacity_and_session(client, monkeypatch):
     with gateway.store.conversation(sid):
         assert gateway.app.state.voice_busy is False
     assert client.get('/sessions').status_code == 200
+
+
+def test_voice_models_reload_once_in_background_after_disconnect(client, monkeypatch):
+    login(client)
+    calls = []
+    monkeypatch.setattr(routes, 'create_speech_services', lambda: calls.append(1) or ())
+    with client.websocket_connect('wss://testserver/voice/ws') as ws:
+        ws.receive_json()
+        assert ws.receive_json()['type'] == 'status'
+        assert ws.receive_json()['type'] == 'ready'
+    assert gateway.app.state.voice_services is not None
+    with client.websocket_connect('wss://testserver/voice/ws') as ws:
+        ws.receive_json()
+        while ws.receive_json()['type'] != 'ready':
+            pass
+    # Initial load, then one background reload after each session; never a duplicate.
+    assert len(calls) == 3
+
+
+def test_pipeline_key_error_is_not_reported_as_missing_conversation(client, monkeypatch):
+    login(client)
+    monkeypatch.setattr(routes, 'create_speech_services', lambda: ())
+    async def broken(self):
+        raise KeyError('pipeline bug')
+    monkeypatch.setattr(routes.WorkerRunner, 'run', broken)
+    with client.websocket_connect('wss://testserver/voice/ws') as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            while True:
+                ws.receive_json()
+        assert exc.value.code == 1011

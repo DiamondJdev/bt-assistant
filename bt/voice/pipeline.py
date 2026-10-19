@@ -13,7 +13,7 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
+from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
@@ -25,7 +25,6 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat.utils.text.skip_tags_aggregator import SkipTagsAggregator
 
 from bt.config import CONFIG
-from bt.personality.system_prompt import SYSTEM_PROMPT
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
 from bt.voice.routing import RoutedLLMService

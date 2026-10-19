@@ -9,7 +9,8 @@ let openTurn = null;
 
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
-  const data = await response.json();
+  // Proxies and server crashes can return HTML or plain text.
+  const data = await response.json().catch(() => ({}));
   if (response.status === 401) {
     if (voice.wanted) disconnect();
     $('login').hidden = false;

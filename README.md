@@ -153,7 +153,7 @@ Copy [.env.example](.env.example) to `.env`; all options have sensible defaults 
 | `OPENAI_API_KEY` | Enables cloud escalation | none |
 | `BT_OPENAI_MODEL` | Cloud fallback model | `gpt-5.6-luna` |
 | `BT_HOST` | Server bind address (see [Remote access](#remote-access-over-tailscale)) | `127.0.0.1` |
-| `BT_API_TOKEN` | Shared secret for browser and API access | none (loopback development only) |
+| `BT_API_TOKEN` | Shared secret for browser and API access | none (required; BT refuses to start without it) |
 | `BT_DB_PATH` | SQLite transcript database path | `bt.sqlite3` |
 | `BT_VOICE` | Enable voice mode when set to `1` | off |
 | `BT_DEVELOPER_MODE` | Enable developer tooling and dashboard when set to `1` | off |

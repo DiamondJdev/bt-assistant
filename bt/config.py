@@ -59,8 +59,9 @@ class Config:
 	dev_ui_enabled: bool = field(default_factory=_dev_ui_default)
 
 	def validate_access(self) -> None:
-		if self.host not in {"127.0.0.1", "::1", "localhost"} and not self.api_token:
-			raise ValueError("Set BT_API_TOKEN before binding to a network interface")
+		# Loopback is not private: Tailscale Serve and other local proxies connect from it.
+		if not self.api_token:
+			raise ValueError("Set BT_API_TOKEN before starting BT")
 
 	# Ollama serves a native API at /api and an OpenAI-compatible one at /v1.
 	# Callers pick the path so BT_OLLAMA_URL stays the only host setting.

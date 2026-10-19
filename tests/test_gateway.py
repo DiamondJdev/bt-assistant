@@ -44,6 +44,16 @@ def test_cross_origin_cookie_requests_are_rejected(client):
     assert client.post('/auth/login', json={'token': 'test-access-token'}, headers={'Origin': 'https://other.example'}).status_code == 403
 
 
+def test_same_host_origin_is_accepted_behind_tls_proxy(client):
+    bearer = {'Authorization': 'Bearer test-access-token'}
+    # Serve terminates TLS, so BT may see plain http for an https page.
+    assert client.post('http://testserver/sessions', headers={**bearer, 'Origin': 'https://testserver'}).status_code == 200
+    proxied = {**bearer, 'Host': '127.0.0.1:8080', 'X-Forwarded-Host': 'bt.example.ts.net', 'Origin': 'https://bt.example.ts.net'}
+    assert client.post('/sessions', headers=proxied).status_code == 200
+    proxied['Origin'] = 'https://other.example'
+    assert client.post('/sessions', headers=proxied).status_code == 403
+
+
 def test_sessions_chat_validation_and_unknown_ids(client, monkeypatch):
     login(client)
     async def reply(messages, text):
