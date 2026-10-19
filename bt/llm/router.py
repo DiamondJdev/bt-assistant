@@ -9,6 +9,7 @@ in-depth.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,13 @@ ESCALATION_PHRASES = (
 )
 
 MAX_TOKENS = 2048
+LLM_TIMEOUT_SECS = 60
+
+_THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
+
+
+def strip_thinking(text: str | None) -> str:
+	return _THINK_RE.sub("", text or "").strip()
 
 # WARN: This could falsely trigger on a valid response
 MAX_TOOL_ITERATIONS = 6
@@ -56,12 +64,12 @@ def _provider(key: str) -> Provider:
 	if key not in _PROVIDERS:
 		if key == "ollama":
 			# Ollama ignores the key, but the SDK insists on one being present.
-			client = AsyncOpenAI(base_url=CONFIG.ollama_url("v1"), api_key="ollama")
+			client = AsyncOpenAI(base_url=CONFIG.ollama_url("v1"), api_key="ollama", timeout=LLM_TIMEOUT_SECS, max_retries=1)
 			_PROVIDERS[key] = Provider(key, CONFIG.ollama_model, client)
 		else:
 			if not CONFIG.openai_api_key:
 				raise RuntimeError("Escalation requested but OPENAI_API_KEY is not set")
-			client = AsyncOpenAI(api_key=CONFIG.openai_api_key)
+			client = AsyncOpenAI(api_key=CONFIG.openai_api_key, timeout=LLM_TIMEOUT_SECS, max_retries=1)
 			_PROVIDERS[key] = Provider(key, CONFIG.openai_model, client)
 	return _PROVIDERS[key]
 
@@ -87,7 +95,7 @@ async def _complete(
 # Checks for bad model response. Content is None whenever the model asked for a
 # tool instead of answering, so this only makes sense on a final message.
 def _looks_degenerate(reply: str | None, user_text: str) -> bool:
-	stripped = (reply or "").strip().lower()
+	stripped = strip_thinking(reply).lower()
 	if not stripped or stripped == user_text.strip().lower():
 		return True
 	return stripped in ("i don't know", "i do not know", "i don't understand")
@@ -127,7 +135,15 @@ async def respond(
 
 	try:
 		for _ in range(MAX_TOOL_ITERATIONS):
-			message = await _complete(current, working, tools)
+			try:
+				message = await _complete(current, working, tools)
+			except openai.APIError as exc:
+				# Covers connection, timeout and status errors; tool turns so far are kept.
+				if escalated:
+					raise
+				log.warning("local call failed (%s), escalating to cloud", exc)
+				current, escalated = _provider("openai"), True
+				continue
 
 			if not message.tool_calls or ctx is None:
 				if not escalated and _looks_degenerate(message.content, user_text):
@@ -148,13 +164,6 @@ async def respond(
 
 		log.warning("tool budget spent after %d rounds, answering without tools", MAX_TOOL_ITERATIONS)
 		return _result(await _complete(current, working), current, ctx)
-	except (openai.APIConnectionError, openai.APITimeoutError) as exc:
-		if escalated:
-			log.error("cloud call failed (%s)", exc)
-			raise
-		log.warning("local call failed (%s), escalating to cloud", exc)
-		message = await _complete(_provider("openai"), working, tools)
-		return _result(message, _provider("openai"), ctx)
 	except Exception as exc:
 		log.exception("Unexpected error during LLM response: %s", exc)
 		raise
@@ -179,7 +188,7 @@ def _assistant_turn(message) -> dict[str, Any]:
 
 def _result(message, provider: Provider, ctx: ToolContext | None) -> LLMResponse:
 	return LLMResponse(
-		text=message.content or "",
+		text=strip_thinking(message.content),
 		compute=provider.key,
 		tools_used=tuple(ctx.used) if ctx else (),
 	)
