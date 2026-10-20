@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from contextlib import ExitStack, suppress
@@ -101,6 +102,7 @@ class _Connection:
 		self.client_tools: list[dict[str, Any]] | None = None
 		self.started = False
 		self.turn: asyncio.Task | None = None
+		self.pending: dict[str, asyncio.Future[ToolResult]] = {}
 
 	async def send(self, frame: dict[str, Any]) -> None:
 		await self.ws.send_json(frame)
@@ -128,6 +130,11 @@ class _Connection:
 				return
 			self.started = True
 			self.turn = asyncio.create_task(self.run_turn(frame))
+		else:
+			# Results for unknown or expired calls are dropped.
+			waiter = self.pending.get(frame.id)
+			if waiter and not waiter.done():
+				waiter.set_result(frame)
 
 	async def on_hello(self, hello: Hello) -> None:
 		if not CONFIG.tools_enabled:
@@ -174,6 +181,7 @@ class _Connection:
 			context=message.context,
 			on_delta=delta,
 			client_tools=self.client_tools,
+			call_client=self.call_client,
 		)
 		if not result:
 			raise ValueError("LLM did not return a response")
@@ -184,6 +192,29 @@ class _Connection:
 			"compute": result.compute,
 			"tools_used": list(result.tools_used),
 		})
+
+	# Asks the app to run one of its tools and returns prose for the model.
+	async def call_client(self, call_id: str, name: str, raw_arguments: str | None) -> str:
+		try:
+			args = json.loads(raw_arguments or "{}")
+		except json.JSONDecodeError:
+			args = {}
+		waiter: asyncio.Future[ToolResult] = asyncio.get_running_loop().create_future()
+		self.pending[call_id] = waiter
+		try:
+			await self.send({
+				"type": "tool_call",
+				"id": call_id,
+				"name": name,
+				"args": args if isinstance(args, dict) else {},
+			})
+			result = await asyncio.wait_for(waiter, CLIENT_TOOL_TIMEOUT_SECS)
+		except TimeoutError:
+			log.warning("client tool %s timed out", name)
+			return f"The app did not answer {name} in time."
+		finally:
+			self.pending.pop(call_id, None)
+		return result.content if result.ok else f"{name} failed: {result.content}"
 
 
 @router.websocket("/chat/ws")

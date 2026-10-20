@@ -186,3 +186,94 @@ def test_hello_tools_reach_the_router(client, monkeypatch):
         ws.send_json({'type': 'message', 'text': 'Hi'})
         assert ws.receive_json()['type'] == 'done'
     assert seen == [([{'type': 'function', 'function': tool}], True)]
+
+
+TOOL = {'name': 'calendar_list_events', 'description': 'List events', 'parameters': {'type': 'object'}}
+
+
+def _tool_turn(monkeypatch, raw='{"day": "today"}'):
+    async def fake(messages, text, **kw):
+        content = await kw['call_client']('c1', 'calendar_list_events', raw)
+        return LLMResponse(content, 'ollama', ('calendar_list_events',))
+    _install(monkeypatch, fake)
+
+
+def _start(ws):
+    ws.receive_json()
+    ws.send_json({'type': 'hello', 'tools': [TOOL]})
+    ws.send_json({'type': 'message', 'text': 'What is on today?'})
+
+
+def test_client_tool_round_trip(client, monkeypatch):
+    _tool_turn(monkeypatch)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        tool_call = ws.receive_json()
+        assert tool_call == {'type': 'tool_call', 'id': 'c1', 'name': 'calendar_list_events', 'args': {'day': 'today'}}
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'No events'})
+        done = ws.receive_json()
+    assert done['text'] == 'No events'
+    assert done['tools_used'] == ['calendar_list_events']
+
+
+def test_invalid_tool_arguments_reach_the_client_as_an_empty_object(client, monkeypatch):
+    _tool_turn(monkeypatch, raw='{not json')
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        assert ws.receive_json()['args'] == {}
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'ok'})
+        assert ws.receive_json()['type'] == 'done'
+
+
+def test_failed_client_tool_is_reported_to_the_model(client, monkeypatch):
+    _tool_turn(monkeypatch)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        ws.receive_json()
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': False, 'content': 'Calendar access is off'})
+        done = ws.receive_json()
+    assert done['text'] == 'calendar_list_events failed: Calendar access is off'
+
+
+def test_unanswered_client_tool_times_out(client, monkeypatch):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_TIMEOUT_SECS', 0.05)
+    _tool_turn(monkeypatch)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        assert ws.receive_json()['type'] == 'tool_call'
+        done = ws.receive_json()
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'too late'})
+        ws.send_json({'type': 'message', 'text': 'still there?'})
+        assert ws.receive_json()['type'] == 'tool_call'
+    assert done['text'] == 'The app did not answer calendar_list_events in time.'
+
+
+def test_unknown_tool_result_is_ignored(client, monkeypatch):
+    _tool_turn(monkeypatch)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        ws.receive_json()
+        ws.send_json({'type': 'tool_result', 'id': 'other', 'ok': True, 'content': 'wrong'})
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'No events'})
+        assert ws.receive_json()['text'] == 'No events'
+
+
+def test_disconnect_mid_turn_cancels_and_stores_no_reply(client, monkeypatch):
+    cancelled = threading.Event()
+    async def blocks(messages, text, **kw):
+        await kw['on_delta']('Working')
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return LLMResponse('never', 'ollama')
+    _install(monkeypatch, blocks)
+    with client.websocket_connect('/chat/ws') as ws:
+        sid = ws.receive_json()['session_id']
+        ws.send_json({'type': 'message', 'text': 'Hi'})
+        assert ws.receive_json()['type'] == 'delta'
+    assert cancelled.wait(2)
+    assert _roles(client, sid) == ['user']
+    with gateway.store.conversation(sid):
+        pass  # the lease was released
