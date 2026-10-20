@@ -22,16 +22,36 @@ final class PomodoroClock {
     }
 }
 
+/// Also installs the global hotkey: the label is the only view alive while
+/// the main window is closed, and it has `openWindow`.
 struct PomodoroMenuBarLabel: View {
     let pomodoro: PomodoroModule
     let clock: PomodoroClock
+    let sidebar: ToolSidebarModel
+    let hotkey: GlobalHotkey
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let _ = clock.now
-        if let title = pomodoro.menuBarTitle {
-            Text(title).monospacedDigit()
-        } else {
-            Image(systemName: "timer")
+        Group {
+            if let title = pomodoro.menuBarTitle {
+                Text(title).monospacedDigit()
+            } else {
+                Image(systemName: "timer")
+            }
+        }
+        .onAppear { hotkey.install(toggle) }
+    }
+
+    private func toggle() {
+        let mainWindowVisible = NSApp.windows.contains { $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized }
+        switch HotkeyAction.resolve(appIsActive: NSApp.isActive, mainWindowVisible: mainWindowVisible) {
+        case .hide:
+            NSApp.hide(nil)
+        case .showCalendar:
+            sidebar.selectedModuleID = "calendar"
+            openWindow(id: "main")
+            NSApp.activate()
         }
     }
 }
