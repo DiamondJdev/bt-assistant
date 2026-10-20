@@ -9,11 +9,11 @@ The systemd unit itself is not shipped from this repo — it lives in the host's
 1. Clone this checkout wherever the host's module expects it (readable/executable by whichever user the module runs the service as). Install dependencies with the repository's Nix shell:
 
    ```sh
-   cd bt-assistant
+   cd bt-assistant/server
    nix develop ./nix --command uv sync --frozen --no-dev --python python3.11 --no-python-downloads
    ```
 
-   Python must come from Nix, not a downloaded uv interpreter. The host's systemd unit should run `.venv/bin/bt` directly rather than `uv run bt`, so the service never re-resolves the environment (or needs network access) at startup or on a crash restart. For reproducible upgrades, check out a reviewed commit and rerun `uv sync` while the service is stopped.
+   The backend lives in the `server/` subdirectory, so the host module's working directory and executable are `<checkout>/server` and `<checkout>/server/.venv/bin/bt`. Python must come from Nix, not a downloaded uv interpreter. The host's systemd unit should run `server/.venv/bin/bt` directly rather than `uv run bt`, so the service never re-resolves the environment (or needs network access) at startup or on a crash restart. For reproducible upgrades, check out a reviewed commit and rerun `uv sync` while the service is stopped.
 
 2. Optionally create `/etc/bt.env`, owned by root with mode `0600`, for provider settings and secrets. Keep secrets out of Nix expressions and Git.
 

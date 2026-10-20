@@ -2,7 +2,7 @@
 
 BT is a local-first, voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It runs a conversational core locally through Ollama, keeps transcripts in SQLite, and can escalate a turn to OpenAI when asked or when the local response fails.
 
-This repository contains a FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
+This repository is a monorepo. `server/` holds the FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. A native macOS app (`apple/`) and editor plugins (`editors/`) are planned; see [the monorepo plan](docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md). See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
 
 ## Architecture
 
@@ -37,13 +37,14 @@ The text conversational core is ready for development use. The voice pipeline is
 - [x] Browser client with typed chat, push-to-talk, saved sessions and reconnect
 - [x] Open HTTP and WebSocket access inside the tailnet, with a same-origin check
 - [x] NixOS service module and daily transcript backups
-- [ ] Native apps and external integrations
+- [ ] Native macOS app (planned in `apple/`)
+- [ ] External integrations
 
 OpenAI fallback has not yet been fully tested end-to-end.
 
 ## Requirements
 
-- Python 3.11 or later
+- Python 3.11 to 3.14 (`ctranslate2` has no 3.15 wheels yet; use `uv sync --python 3.14` if uv picks a newer one)
 - [uv](https://docs.astral.sh/uv/)
 - [Ollama](https://ollama.com/) running locally
 - An Ollama chat model that matches `BT_OLLAMA_MODEL`
@@ -51,6 +52,8 @@ OpenAI fallback has not yet been fully tested end-to-end.
 Voice mode also needs FFmpeg, PortAudio, and Piper. The Nix development shell provides these dependencies.
 
 ## Quick start
+
+Run every command in this section and the next from `server/`.
 
 ### NixOS / Nix
 
@@ -144,7 +147,7 @@ For the NixOS service, private Tailscale HTTPS, backup/restore steps and deploym
 
 ## Configuration
 
-Copy [.env.example](.env.example) to `.env`; all options have sensible defaults unless noted otherwise.
+Copy [server/.env.example](server/.env.example) to `server/.env`; all options have sensible defaults unless noted otherwise.
 
 | Setting | Purpose | Default |
 | --- | --- | --- |
@@ -166,18 +169,21 @@ BT normally uses Ollama. It escalates to the configured OpenAI model when you ex
 
 ## Project layout
 
-- `bt/client/` — browser chat, push-to-talk and saved conversations
-- `bt/gateway/` — HTTP gateway, same-origin check and health endpoints
-- `bt/llm/` — local/cloud model routing
-- `bt/voice/`, `bt/stt/`, and `bt/tts/` — optional voice pipeline
-- `bt/transcript/` — SQLite-backed sessions and turns
-- `bt/personality/SOUL.md` — personality source used to build the system prompt
+- `server/` — Python backend (`pyproject.toml`, `uv.lock`, `tests/`, `nix/`)
+- `server/bt/client/` — browser chat, push-to-talk and saved conversations
+- `server/bt/gateway/` — HTTP gateway, same-origin check and health endpoints
+- `server/bt/llm/` — local/cloud model routing
+- `server/bt/voice/`, `server/bt/stt/`, and `server/bt/tts/` — optional voice pipeline
+- `server/bt/transcript/` — SQLite-backed sessions and turns
+- `server/bt/personality/SOUL.md` — personality source used to build the system prompt
 - `docs/DESIGN.md` — design decisions and phase-two ideas
 
 ## Verification
 
+From `server/`:
+
 ```sh
-uv run pytest -q
+uv run python -m pytest -q
 node --test tests/*.test.mjs
 ```
 
