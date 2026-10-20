@@ -10,7 +10,17 @@ result
 !.env.example
 .DS_Store
 
-/.nix-runtime*
+.nix-runtime*
 
 # Memory files: personal facts written by the model, never reviewed before commit
 memory/
+
+# Swift / Xcode
+.build/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Editor plugins
+node_modules/
+*.vsix
