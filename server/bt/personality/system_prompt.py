@@ -73,7 +73,9 @@ def situation(surface: str) -> list[str]:
 
 
 # Per-turn facts and the memories matching the request, so reads need no tool call.
-def turn_note(user_text: str, *, session_id: str | None = None, turns: int | None = None) -> str:
+def turn_note(
+	user_text: str, *, session_id: str | None = None, turns: int | None = None, context: str | None = None
+) -> str:
 	now = datetime.now().astimezone()
 	lines = [
 		"Turn context, added by the system and not spoken by the Pilot.",
@@ -88,6 +90,8 @@ def turn_note(user_text: str, *, session_id: str | None = None, turns: int | Non
 		found = []
 	if found:
 		lines.append("Stored memories matching this request. " + recall(found))
+	if context:
+		lines.append(f"App context: {context}")
 	return " ".join(lines)
 
 

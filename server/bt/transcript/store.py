@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS turns (
 	role TEXT NOT NULL,          -- 'user' | 'bt'
 	text TEXT NOT NULL,
 	input_mode TEXT,             -- 'voice_wake' | 'voice_ptt' | 'text' (user turns)
-	compute TEXT                 -- 'ollama' | 'openai' (bt turns)
+	compute TEXT,                -- 'ollama' | 'openai' (bt turns)
+	context TEXT                 -- app context sent with a user turn; a record, never replayed
 );
 
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, ts);
@@ -52,6 +53,7 @@ class Turn:
 	text: str
 	input_mode: str | None = None
 	compute: str | None = None
+	context: str | None = None
 
 
 class TranscriptStore:
@@ -66,6 +68,9 @@ class TranscriptStore:
 		self._conn.execute("PRAGMA foreign_keys=ON")
 		self._conn.execute("PRAGMA journal_mode=WAL")
 		self._conn.executescript(SCHEMA)
+		columns = {row[1] for row in self._conn.execute("PRAGMA table_info(turns)")}
+		if "context" not in columns:
+			self._conn.execute("ALTER TABLE turns ADD COLUMN context TEXT")
 		self._conn.commit()
 
 	def close(self) -> None:
@@ -118,6 +123,7 @@ class TranscriptStore:
 		text: str,
 		input_mode: str | None = None,
 		compute: str | None = None,
+		context: str | None = None,
 	) -> Turn:
 		turn = Turn(
 			id=str(uuid.uuid4()),
@@ -127,12 +133,13 @@ class TranscriptStore:
 			text=text,
 			input_mode=input_mode,
 			compute=compute,
+			context=context,
 		)
 		with self._lock:
 			self._conn.execute(
-				"""INSERT INTO turns (id, session_id, ts, role, text, input_mode, compute)
-						VALUES (?, ?, ?, ?, ?, ?, ?)""",
-				(turn.id, turn.session_id, turn.ts, turn.role, turn.text, turn.input_mode, turn.compute),
+				"""INSERT INTO turns (id, session_id, ts, role, text, input_mode, compute, context)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+				(turn.id, turn.session_id, turn.ts, turn.role, turn.text, turn.input_mode, turn.compute, turn.context),
 			)
 			self._conn.commit()
 		return turn
@@ -142,7 +149,7 @@ class TranscriptStore:
 		with self._lock:
 			self._require_session(session_id)
 			rows = self._conn.execute(
-				"""SELECT id, session_id, ts, role, text, input_mode, compute
+				"""SELECT id, session_id, ts, role, text, input_mode, compute, context
 						FROM turns WHERE session_id = ? ORDER BY ts DESC, rowid DESC LIMIT ?""", (session_id, limit),
 			).fetchall()
 		return [Turn(*row) for row in reversed(rows)]

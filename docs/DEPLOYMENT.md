@@ -46,6 +46,8 @@ The systemd unit itself is not shipped from this repo — it lives in the host's
 
    Open the reported HTTPS URL on your Mac or iPhone while connected to Tailscale. BT has no login, so the tailnet is the only access boundary. Configure tailnet grants so only your intended devices can reach this host on HTTPS. Keep port 8080 bound to `127.0.0.1`; do not open it to the LAN or Internet. Use Serve, not Funnel. See the [Tailscale Serve documentation](https://tailscale.com/docs/reference/tailscale-cli/serve).
 
+   The macOS app uses the same HTTPS address: enter it under BT › Settings. Its chat socket, `/chat/ws`, goes through the same Serve port, so no extra port is needed.
+
 5. Test typed chat and a foreground voice session from each device. Restart BT, reopen the browser, and confirm the conversation is restored. Check readiness with an authenticated `GET /ready`; it returns 503 if the database cannot be read, Ollama is unreachable, or the selected model is missing. Run a 24-hour trial before depending on the service daily.
 
 The browser microphone needs HTTPS or localhost. iOS background/lock-screen listening and wake words are outside this release. Denying microphone permission leaves typed chat available. Every device that can reach BT sees every conversation; this is not a multi-user service. To revoke a device, remove its tailnet access.

@@ -28,7 +28,7 @@ Most Swift code goes in `BTKit` so the iOS app is mostly a new target, and so `.
 - `turn_note` already carries per-turn facts on the latest user message so the system prompt stays cacheable. The app's context snapshot goes there.
 - Server tools are declared with `@tool` and rendered as OpenAI JSON.
 
-Gaps: text chat is `POST /chat` with no streaming, and there is no way for a client to supply tools. Phase 5 adds both.
+Phase 5 added `/chat/ws` for streaming text chat and client-supplied tools. The browser client still uses `POST /chat`.
 
 Constraints for tool design:
 
@@ -47,7 +47,14 @@ Constraints for tool design:
 6. Context layer. Snapshot fragments with priorities under a token budget of about 500 tokens, tool routing over the socket, approve or deny cards before any tool that changes data outside the app.
 7. Coding tracker. VS Code extension, `inbox/*.jsonl` watcher, sessionizer, Swift Charts stats, `coding_*` tools.
 8. Today view and events. Proactive event turns with a per-hour cap and quiet hours, start focus from an event, auto-tagging.
-9. Voice in the Mac client over the existing `/voice/ws` wire format, then delete the browser client.
+9. Voice in the Mac client over the existing `/voice/ws` wire format. The browser client stays, since the owner uses it on the iPhone.
+10. Native iOS app, after the Mac app is finished. It reuses BTKit; the browser client is deleted once the iOS app covers what it does.
+
+Later goals the owner described on October 20, 2026, not yet assigned to a design:
+
+- Link a focus session to a calendar event and show the focused share of the event's block (for example 90%). Extends phase 8's "start focus from an event".
+- A tool that answers "when am I most productive?" from focus history. Phase 6 or 8.
+- Briefings such as "Start the day", "Help me choose today's work" and "Catch me up on X". Phase 8's Today view is the starting point.
 
 ## Progress
 
@@ -63,7 +70,11 @@ Phase 3 is complete as of October 20, 2026. `apple/BTKit/Sources/BTKit/Calendar`
 
 Verification: 51 package tests pass across both modules and the Debug build succeeds. On October 20 the owner ran the recurring-edit check against a throwaway weekly series. Moving occurrence 2 with `.thisEvent` changed only that occurrence. Renaming occurrence 3 with `.futureEvents` changed 3 and 4 and left 1 and 2 alone. The harness was then removed. Hand checks of the views are still pending.
 
-Next: Phase 4, global hotkey. See [the Apple client README](../../../apple/README.md) for build and test commands.
+Phases 4 and 5 are complete as of October 20, 2026, from [the hotkey and chat design](../specs/2026-10-20-hotkey-and-chat-design.md) and [its plan](2026-10-20-hotkey-and-chat.md). ⌃⌥Space hides BT when its window is showing and otherwise brings it forward on Calendar. The server streams text chat over `/chat/ws` with client-supplied tools, a 30-second client tool timeout and a nullable `context` column on turns. The BT pane lists every conversation, including ones from the browser client, streams replies and takes its server address from Settings. The Mac sends no tools and no context yet; phase 6 adds both. There is no offline cache.
+
+Verification: 118 Python tests and 68 package tests pass, and the Debug build succeeds. The hotkey and a chat session against a live server still need a hand check by the owner.
+
+Next: Phase 6, context layer. See [the Apple client README](../../../apple/README.md) for build and test commands.
 
 ## Open questions
 

@@ -6,17 +6,13 @@ public struct BTModule: ToolModule {
     public let symbol = "bubble.left.and.bubble.right"
     public let tools: [ToolDefinition] = []
     public let snapshot: String? = nil
+    private let chat: ChatModel
 
-    public init() {}
+    public init(chat: ChatModel = ChatModel()) {
+        self.chat = chat
+    }
 
     public var content: AnyView {
-        AnyView(
-            ContentUnavailableView(
-                "BT",
-                systemImage: symbol,
-                description: Text("Chat will connect to your BT server in a later phase.")
-            )
-            .accessibilityIdentifier("bt-placeholder")
-        )
+        AnyView(ChatView(model: chat))
     }
 }

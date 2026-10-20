@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,7 @@ import openai
 from openai import AsyncOpenAI
 
 from bt.config import CONFIG
+from bt.llm.streaming import completion_kwargs, stream_complete
 from bt.personality.system_prompt import recent_user_text, render_system_prompt, turn_note, with_turn_note
 from bt.tools.registry import ToolContext, dispatch_call, openai_tools
 
@@ -32,7 +34,6 @@ ESCALATION_PHRASES = (
 	"escalate",
 )
 
-MAX_TOKENS = 2048
 LLM_TIMEOUT_SECS = 60
 
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
@@ -82,17 +83,7 @@ async def _complete(
 	tools: list[dict[str, Any]] | None = None,
 	tool_choice: str | None = None,
 ):
-	kwargs: dict[str, Any] = {"model": provider.model, "messages": messages}
-	if tools:
-		kwargs["tools"] = tools
-		if tool_choice:
-			kwargs["tool_choice"] = tool_choice
-	if provider.key == "openai":
-		kwargs["max_completion_tokens"] = MAX_TOKENS
-	else:
-		kwargs["max_tokens"] = MAX_TOKENS
-
-	resp = await provider.client.chat.completions.create(**kwargs)
+	resp = await provider.client.chat.completions.create(**completion_kwargs(provider, messages, tools, tool_choice))
 	if not resp.choices:
 		raise ValueError(f"{provider.key} returned no choices")
 	return resp.choices[0].message
@@ -127,6 +118,11 @@ async def respond(
 	provider: str | None = None,
 	ctx: ToolContext | None = None,
 	session_id: str | None = None,
+	*,
+	context: str | None = None,
+	on_delta: Callable[[str], Awaitable[None]] | None = None,
+	client_tools: list[dict[str, Any]] | None = None,
+	call_client: Callable[[str, str, str], Awaitable[str]] | None = None,
 ) -> LLMResponse | None:
 	if provider not in {None, "local", "cloud"}:
 		raise ValueError("Unknown provider")
@@ -135,44 +131,57 @@ async def respond(
 		log.info("starting on the cloud model")
 
 	current = _provider("openai" if escalated else "ollama")
+	note = turn_note(recent_user_text(messages), session_id=session_id, turns=_user_turns(messages), context=context)
 	working: list[Any] = [
 		{"role": "system", "content": render_system_prompt(surface="text")},
-		*with_turn_note(messages, turn_note(recent_user_text(messages), session_id=session_id, turns=_user_turns(messages))),
+		*with_turn_note(messages, note),
 	]
-	tools = openai_tools() if ctx is not None and CONFIG.tools_enabled else None
+	tools = None
+	client_names: set[str] = set()
+	if ctx is not None and CONFIG.tools_enabled:
+		tools = openai_tools() + list(client_tools or ())
+		client_names = {t["function"]["name"] for t in client_tools or ()}
 
+	async def complete(tool_choice: str | None = None):
+		if on_delta is None:
+			extra = {"tool_choice": tool_choice} if tool_choice else {}
+			return await _complete(current, working, tools, **extra)
+		# A mid-turn escalation stops deltas; the cloud reply arrives whole with the result.
+		return await stream_complete(current, working, tools, tool_choice, on_text=stream_to)
+
+	stream_to = on_delta
 	try:
 		for _ in range(MAX_TOOL_ITERATIONS):
 			try:
-				message = await _complete(current, working, tools)
+				message = await complete()
 			except (openai.APIError, ValueError) as exc:
 				# Covers connection, timeout, status errors and malformed replies; tool turns so far are kept.
 				if escalated:
 					raise
 				log.warning("local call failed (%s), escalating to cloud", exc)
-				current, escalated = _provider("openai"), True
+				current, escalated, stream_to = _provider("openai"), True, None
 				continue
 
 			if not message.tool_calls or ctx is None:
 				if not escalated and _looks_degenerate(message.content, user_text):
 					log.warning("local response looks degenerate, escalating to cloud")
-					current, escalated = _provider("openai"), True
+					current, escalated, stream_to = _provider("openai"), True, None
 					continue
 				return _result(message, current, ctx)
 
 			working.append(_assistant_turn(message))
 			for call in message.tool_calls:
-				working.append({
-					"role": "tool",
-					"tool_call_id": call.id,
-					"content": await dispatch_call(
-						call.function.name, call.function.arguments, ctx
-					),
-				})
+				name, arguments = call.function.name, call.function.arguments
+				if name in client_names:
+					content = await call_client(call.id, name, arguments)
+					ctx.used.append(name)
+				else:
+					content = await dispatch_call(name, arguments, ctx)
+				working.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
 		log.warning("tool budget spent after %d rounds, answering without tools", MAX_TOOL_ITERATIONS)
 		# Tools stay declared so the tool turns above remain valid; "none" forces prose.
-		return _result(await _complete(current, working, tools, tool_choice="none"), current, ctx)
+		return _result(await complete(tool_choice="none"), current, ctx)
 	except Exception as exc:
 		log.exception("Unexpected error during LLM response: %s", exc)
 		raise

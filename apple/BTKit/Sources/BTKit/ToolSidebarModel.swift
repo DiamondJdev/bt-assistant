@@ -2,16 +2,16 @@ import Observation
 
 @MainActor
 @Observable
-final class ToolSidebarModel {
-    let modules: [any ToolModule]
-    var selectedModuleID: String?
+public final class ToolSidebarModel {
+    public let modules: [any ToolModule]
+    public var selectedModuleID: String?
 
-    init(modules: [any ToolModule]) {
+    public init(modules: [any ToolModule]) {
         self.modules = modules
         selectedModuleID = modules.first?.id
     }
 
-    var selectedModule: (any ToolModule)? {
+    public var selectedModule: (any ToolModule)? {
         modules.first { $0.id == selectedModuleID }
     }
 }
