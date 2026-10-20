@@ -33,6 +33,16 @@ func monthGridDays(containing date: Date, calendar: Calendar) -> [Date] {
     return days(in: DateInterval(start: start, end: end), calendar: calendar)
 }
 
+/// Minutes from local midnight by the wall clock, clamped to the day, so a DST day still
+/// has 24 hour rows and 3 PM sits on the 3 PM row.
+func minutesIntoDay(_ date: Date, day: Date, calendar: Calendar) -> Double {
+    let interval = visibleInterval(for: .day, containing: day, calendar: calendar)
+    if date <= interval.start { return 0 }
+    if date >= interval.end { return 24 * 60 }
+    let parts = calendar.dateComponents([.hour, .minute], from: date)
+    return Double(parts.hour! * 60 + parts.minute!)
+}
+
 private func days(in interval: DateInterval, calendar: Calendar) -> [Date] {
     var result: [Date] = []
     var day = interval.start

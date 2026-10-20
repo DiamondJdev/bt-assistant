@@ -9,6 +9,7 @@ struct BTMacApp: App {
     private let container: ModelContainer
     @State private var pomodoro: PomodoroModule
     @State private var clock: PomodoroClock
+    @State private var calendar = CalendarModule()
 
     init() {
         do {
@@ -23,7 +24,7 @@ struct BTMacApp: App {
 
     var body: some Scene {
         Window("BT", id: "main") {
-            ToolSidebar(modules: [BTModule(), pomodoro])
+            ToolSidebar(modules: [BTModule(), pomodoro, calendar])
                 .frame(minWidth: 640, minHeight: 400)
         }
         .defaultSize(width: 960, height: 640)

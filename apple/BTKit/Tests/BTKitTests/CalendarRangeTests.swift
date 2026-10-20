@@ -51,4 +51,28 @@ struct CalendarRangeTests {
         #expect(interval.start == date(2026, 11, 1))
         #expect(interval.end == date(2026, 11, 2))
     }
+
+    @Test func timelinePositionUsesLocalClockOnDSTDay() {
+        let calendar = testCalendar()
+        let day = date(2026, 11, 1)
+        #expect(minutesIntoDay(date(2026, 11, 1, 15), day: day, calendar: calendar) == 15 * 60)
+        #expect(minutesIntoDay(date(2026, 10, 31, 22), day: day, calendar: calendar) == 0)
+        #expect(minutesIntoDay(date(2026, 11, 2, 1), day: day, calendar: calendar) == 24 * 60)
+    }
+
+    @Test func overlappingEventsShareColumns() {
+        func event(_ id: String, _ startHour: Int, _ endHour: Int) -> CalendarEventItem {
+            CalendarEventItem(
+                eventIdentifier: id, occurrenceStart: date(2026, 10, 21, startHour), title: id,
+                start: date(2026, 10, 21, startHour), end: date(2026, 10, 21, endHour), isAllDay: false,
+                calendarTitle: "", colorHex: nil, location: nil, isRecurring: false, isEditable: true
+            )
+        }
+        let a = event("a", 9, 11), b = event("b", 10, 12), c = event("c", 11, 13), d = event("d", 14, 15)
+        let layout = timelineLayout([a, b, c, d])
+        #expect(layout[a.id]?.column == 0 && layout[a.id]?.columns == 2)
+        #expect(layout[b.id]?.column == 1 && layout[b.id]?.columns == 2)
+        #expect(layout[c.id]?.column == 0 && layout[c.id]?.columns == 2)
+        #expect(layout[d.id]?.column == 0 && layout[d.id]?.columns == 1)
+    }
 }
