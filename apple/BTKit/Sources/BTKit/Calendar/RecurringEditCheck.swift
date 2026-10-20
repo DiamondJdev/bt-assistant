@@ -43,6 +43,11 @@ extension CalendarStore {
             event.recurrenceRules = [EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: EKRecurrenceEnd(occurrenceCount: 4))]
             try save(event, span: .thisEvent)
             let created = dump("created")
+            guard created.count == 4 else {
+                log.error("RecurringCheck: expected 4 occurrences, found \(created.count); deleting")
+                if let first = created.first { try delete(first, span: .futureEvents) }
+                return
+            }
 
             let second = created[1]
             second.startDate = second.startDate.addingTimeInterval(3600)
