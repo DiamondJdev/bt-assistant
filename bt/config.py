@@ -56,7 +56,7 @@ class Config:
 	piper_binary: str = field(default_factory=lambda: os.environ.get("BT_PIPER_BIN", "piper"))
 
 	# STT (User Inputs)
-	whisper_model: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_MODEL", "distil-large-v3.5"))
+	whisper_model: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_MODEL", "base.en"))
 	whisper_device: str = field(default_factory=lambda: os.environ.get("BT_WHISPER_DEVICE", "auto"))
 
 	host: str = field(default_factory=lambda: os.environ.get("BT_HOST", "127.0.0.1"))
