@@ -77,21 +77,11 @@ struct CalendarView: View {
                             start: defaultNewEventStart(on: module.focusDate, now: module.now(), calendar: .current)
                         ) { showQuickCreate = false }
                     }
-                #if DEBUG
-                Button("Recurring Check", systemImage: "ladybug") { module.store.runRecurringEditCheck() }
-                #endif
             }
         }
         .sheet(item: $module.editorRequest) { request in
             EventEditor(module: module, request: request)
         }
-        #if DEBUG
-        .task {
-            if ProcessInfo.processInfo.arguments.contains("-BTRecurringCheck") {
-                module.store.runRecurringEditCheck()
-            }
-        }
-        #endif
     }
 
     private func step(forward: Bool) {
