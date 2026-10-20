@@ -54,7 +54,8 @@ struct CalendarView: View {
             Divider()
             switch module.mode {
             case .day: DayView(module: module, events: events)
-            case .week, .month: DayView(module: module, events: events)
+            case .week: WeekView(module: module, events: events)
+            case .month: MonthView(module: module, events: events)
             }
         }
         .toolbar {

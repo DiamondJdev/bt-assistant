@@ -30,10 +30,7 @@ struct DayView: View {
                     }
                     .padding()
                 }
-                .onAppear {
-                    let hour = isToday ? max(calendar.component(.hour, from: .now) - 1, 0) : 8
-                    proxy.scrollTo(hour, anchor: .top)
-                }
+                .onAppear { proxy.scrollTo(initialScrollHour(showingToday: isToday), anchor: .top) }
             }
         }
     }

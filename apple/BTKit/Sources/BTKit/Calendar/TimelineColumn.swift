@@ -2,6 +2,11 @@ import SwiftUI
 
 let hourHeight: CGFloat = 48
 
+/// The hour row to scroll to first: just before now on today, otherwise the start of a working day.
+func initialScrollHour(showingToday: Bool) -> Int {
+    showingToday ? max(Calendar.current.component(.hour, from: .now) - 1, 0) : 8
+}
+
 /// Side-by-side placement for overlapping timed events: column index and column count per event id.
 func timelineLayout(_ events: [CalendarEventItem]) -> [String: (column: Int, columns: Int)] {
     var result: [String: (column: Int, columns: Int)] = [:]
