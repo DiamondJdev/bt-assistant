@@ -124,4 +124,13 @@ struct PomodoroTimerTests {
 
         #expect(interval.map { $0.end.timeIntervalSince($0.start) } == 300)
     }
+
+    @Test func durationsDecodeMissingFieldsAsDefaults() throws {
+        let decoded = try JSONDecoder().decode(PomodoroDurations.self, from: Data(#"{"work":600}"#.utf8))
+
+        #expect(decoded.work == 600)
+        #expect(decoded.shortBreak == 300)
+        #expect(decoded.longBreak == 900)
+        #expect(decoded.longBreakEvery == 4)
+    }
 }

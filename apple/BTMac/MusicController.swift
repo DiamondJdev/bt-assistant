@@ -41,26 +41,22 @@ final class MusicController: NowPlayingSource {
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
+    // ponytail: scripts run on the main actor (NSAppleScript isn't thread-safe and this keeps
+    // results in order); a hung Music would stall the UI, move to a serial actor if that happens.
     func refresh() {
-        Task {
-            status = await Task.detached { Self.fetchStatus() }.value
-        }
+        status = Self.fetchStatus()
     }
 
     private func send(_ command: String) {
-        Task {
-            status = await Task.detached {
-                if Self.isRunning { _ = Self.run("tell application \"Music\" to \(command)") }
-                return Self.fetchStatus()
-            }.value
-        }
+        if Self.isRunning { _ = Self.run("tell application \"Music\" to \(command)") }
+        refresh()
     }
 
     private nonisolated static var isRunning: Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
 
-    private nonisolated static func fetchStatus() -> NowPlayingStatus {
+    private static func fetchStatus() -> NowPlayingStatus {
         guard isRunning else { return .notRunning }
         let script = """
         tell application "Music"
@@ -90,7 +86,7 @@ final class MusicController: NowPlayingSource {
         let code: Int
     }
 
-    private nonisolated static func run(_ source: String) -> Result<NSAppleEventDescriptor, ScriptError> {
+    private static func run(_ source: String) -> Result<NSAppleEventDescriptor, ScriptError> {
         var error: NSDictionary?
         guard let result = NSAppleScript(source: source)?.executeAndReturnError(&error), error == nil else {
             let code = error?[NSAppleScript.errorNumber] as? Int ?? 0

@@ -12,6 +12,15 @@ public struct PomodoroDurations: Codable, Equatable, Sendable {
 
     public init() {}
 
+    /// Missing keys keep their defaults, so adding a field never resets saved durations.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        work = try container.decodeIfPresent(TimeInterval.self, forKey: .work) ?? work
+        shortBreak = try container.decodeIfPresent(TimeInterval.self, forKey: .shortBreak) ?? shortBreak
+        longBreak = try container.decodeIfPresent(TimeInterval.self, forKey: .longBreak) ?? longBreak
+        longBreakEvery = try container.decodeIfPresent(Int.self, forKey: .longBreakEvery) ?? longBreakEvery
+    }
+
     public func duration(of phase: PomodoroPhase) -> TimeInterval {
         switch phase {
         case .work: work
