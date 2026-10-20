@@ -76,7 +76,11 @@ public final class CalendarStore {
         let match = ekEvents(from: start, to: end).first {
             $0.calendarItemIdentifier == item.eventIdentifier && ($0.occurrenceDate ?? $0.startDate) == item.occurrenceStart
         }
-        return match ?? store.calendarItem(withIdentifier: item.eventIdentifier) as? EKEvent
+        // No series-master fallback: for a repeating event it is the first occurrence, not the one clicked.
+        if match == nil && !item.isRecurring {
+            return store.calendarItem(withIdentifier: item.eventIdentifier) as? EKEvent
+        }
+        return match
     }
 
     public func newEvent() -> EKEvent {

@@ -30,7 +30,7 @@ Keep this section updated with mistakes you've made or behaviors that future age
 - The local Qwen3 model (no_think) rarely chains a second tool call; it announces the next step and stops. Make one tool call return everything the answer needs (memory_search returns bodies for this reason).
 - Keep the system prompt stable. Per-turn facts (time, turn, recalled memories) go on the latest user message via `turn_note`; a changing system prompt makes Ollama re-read the tools and whole history every turn.
 - `ModuleNotFoundError: No module named 'bt'` from `uv run pytest` or `bt-dev`: macOS keeps marking the venv `.pth` files hidden and Python 3.14 skips them. Run tests with `uv run python -m pytest -q` from `server/`.
-- `swift test --package-path apple/BTKit` failing in CodeSign with "resource fork, Finder information, or similar detritus not allowed": macOS added a FinderInfo xattr to the test bundle. Run `xattr -cr apple/BTKit/.build` and rerun.
+- `swift test --package-path apple/BTKit` failing in CodeSign with "resource fork, Finder information, or similar detritus not allowed": macOS keeps adding a FinderInfo xattr under `~/Documents`. Build outside it: add `--scratch-path /tmp/btkit-build`.
 - `uv sync` may pick Python 3.15, which `ctranslate2` has no wheels for. Use `uv sync --python 3.14`.
 
 Keep this section short. Add concrete mistakes and their fixes as they occur; never include secrets or private transcripts.

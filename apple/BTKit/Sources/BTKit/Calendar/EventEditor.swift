@@ -66,7 +66,14 @@ struct EventEditor: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    if !request.isNew && request.event.hasRecurrenceRules { askSpan = true } else { save(span: .thisEvent) }
+                    if request.isNew || !request.event.hasRecurrenceRules {
+                        save(span: .thisEvent)
+                    } else if recurrenceChanged {
+                        // A new repeat rule applies from here on, as in Calendar.app.
+                        save(span: .futureEvents)
+                    } else {
+                        askSpan = true
+                    }
                 }
                 .disabled(end < start)
             }
@@ -91,6 +98,12 @@ struct EventEditor: View {
         }
     }
 
+    private var newRecurrenceEnd: Date? { hasRecurrenceEnd ? recurrenceEnd : nil }
+
+    private var recurrenceChanged: Bool {
+        recurrence != originalRecurrence || newRecurrenceEnd != originalRecurrenceEnd
+    }
+
     private func save(span: EditSpan) {
         let event = request.event
         event.title = title.isEmpty ? "New Event" : title
@@ -102,10 +115,8 @@ struct EventEditor: View {
         }
         event.location = location.isEmpty ? nil : location
         event.notes = notes.isEmpty ? nil : notes
-        let newEnd = hasRecurrenceEnd ? recurrenceEnd : nil
         // Only touch rules the owner changed, so custom rules and untouched series survive the save.
-        if recurrence != originalRecurrence || newEnd != originalRecurrenceEnd,
-           let rules = recurrenceRules(for: recurrence, end: newEnd) {
+        if recurrenceChanged, let rules = recurrenceRules(for: recurrence, end: newRecurrenceEnd) {
             event.recurrenceRules = rules.isEmpty ? nil : rules
         }
         do {
