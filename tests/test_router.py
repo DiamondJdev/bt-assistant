@@ -1,7 +1,9 @@
 import asyncio
 from types import SimpleNamespace
 
+from bt.library import MemoryStore
 from bt.llm import router
+from bt.personality import system_prompt
 
 
 def test_text_path_sends_session_facts(monkeypatch):
@@ -12,10 +14,30 @@ def test_text_path_sends_session_facts(monkeypatch):
     monkeypatch.setattr(router, '_complete', complete)
     history = [{'role': 'user', 'content': 'What time is it?'}]
     asyncio.run(router.respond(history, 'What time is it?', session_id='s1'))
-    system = seen[0][0]
-    assert system['role'] == 'system'
-    assert 'Session s1, turn 1.' in system['content']
-    assert 'The current date and time is' in system['content']
+    system, user = seen[0][0], seen[0][-1]
+    assert system['role'] == 'system' and 'Session s1' not in system['content']
+    assert user['content'].startswith('What time is it?')
+    assert 'Session s1, turn 1.' in user['content']
+    assert 'The current date and time is' in user['content']
+    assert history[0]['content'] == 'What time is it?'
+
+
+def test_text_path_recalls_memory_for_a_bare_yes(monkeypatch, tmp_path):
+    store = MemoryStore(tmp_path)
+    store.write('to-do-list', 'To-do list', 'Fix dinner. Do chemistry homework.')
+    monkeypatch.setattr(system_prompt, 'get_memory', lambda: store)
+    seen = []
+    async def complete(provider, messages, tools=None):
+        seen.append(messages)
+        return SimpleNamespace(content='Fix dinner, then chemistry.', tool_calls=None)
+    monkeypatch.setattr(router, '_complete', complete)
+    history = [
+        {'role': 'user', 'content': 'Can you read me my to-do list?'},
+        {'role': 'assistant', 'content': 'Shall I proceed?'},
+        {'role': 'user', 'content': 'Yes.'},
+    ]
+    asyncio.run(router.respond(history, 'Yes.', session_id='s1'))
+    assert 'Do chemistry homework.' in seen[0][-1]['content']
 
 
 from dataclasses import replace

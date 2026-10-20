@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from bt.library import MemoryStore
+from bt.library import SEARCH_BODY_CHARS, MemoryStore
 from bt.tools import builtin
 
 
@@ -17,4 +17,4 @@ def test_memory_search_caps_long_bodies(tmp_path):
     store = MemoryStore(tmp_path)
     store.write('notes', 'Notes', 'word ' * 2000)
     result = asyncio.run(builtin.memory_search(SimpleNamespace(memory=store), 'notes'))
-    assert len(result) < 2 * builtin.SEARCH_BODY_CHARS
+    assert len(result) < 2 * SEARCH_BODY_CHARS

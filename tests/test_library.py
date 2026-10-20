@@ -36,3 +36,11 @@ def test_index_is_not_reparsed_when_nothing_changed(tmp_path, monkeypatch):
     monkeypatch.setattr(store, '_load', lambda path: loads.append(path))
     store.index_lines()
     assert loads == []
+
+
+def test_search_ignores_filler_words(tmp_path):
+    # Memories are searched with every voice turn, so small talk must not pull them into the prompt.
+    store = MemoryStore(tmp_path)
+    store.write('pilot', 'The Pilot is Jordan.', 'You are talking to Jordan, who does not like long answers.')
+    assert store.search('how are you doing') == []
+    assert [m.name for m in store.search('who is jordan')] == ['pilot']

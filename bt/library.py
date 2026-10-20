@@ -86,6 +86,15 @@ class Memory:
 
 _WORDS = re.compile(r"[a-z0-9']+")
 
+# Words that match nearly every memory; voice turns are searched automatically, so small talk must miss.
+_FILLER = frozenset("""
+about all and any are but can could did does doing for from get going got had has have hey how i'm
+its it's just know not please remember should some tell than that the them then there they this was
+were what when where who why will with would you you're your
+""".split())
+
+SEARCH_BODY_CHARS = 600
+
 # Name matches beat description matches beat body matches.
 _WEIGHTS = ((3, "name"), (2, "description"), (1, "body"))
 
@@ -180,7 +189,7 @@ class MemoryStore:
 		return memory
 
 	def search(self, query: str, limit: int = 5) -> list[Memory]:
-		words = [w for w in _WORDS.findall(query.lower()) if len(w) > 2]
+		words = [w for w in _WORDS.findall(query.lower()) if len(w) > 2 and w not in _FILLER]
 		if not words:
 			return []
 
@@ -283,3 +292,14 @@ def get_skills() -> SkillLibrary:
 	if _SKILLS is None:
 		_SKILLS = SkillLibrary()
 	return _SKILLS
+
+
+# Bodies are included because the local model rarely chains a second call to memory_read.
+def recall(memories: list[Memory]) -> str:
+	return " ".join(f"{m.name}: {m.description} {_clip(m.body)}" for m in memories)
+
+
+def _clip(body: str) -> str:
+	# ponytail: fixed cap keeps five matches inside a 4096-token context; raise it with num_ctx
+	body = body.strip()
+	return body if len(body) <= SEARCH_BODY_CHARS else body[:SEARCH_BODY_CHARS].rstrip() + " (truncated; memory_read has the rest)"

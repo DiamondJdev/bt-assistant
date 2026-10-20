@@ -36,21 +36,45 @@ def test_voice_refreshes_prompt_each_turn_on_both_services(monkeypatch):
         for text in ('hi', 'escalate'):
             out = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': text}]))
             [chunk async for chunk in out]
-        assert seen == [('RoutedLLMService', 'turn one' + routing.NO_THINK), ('OpenAILLMService', 'turn two')]
+        assert seen == [('RoutedLLMService', 'turn one' + routing.NO_THINK), ('CloudLLMService', 'turn two')]
         await service.cleanup()
     asyncio.run(run())
 
 
-def test_voice_prompt_carries_session_and_turn(monkeypatch):
+def test_voice_request_carries_turn_note_on_latest_user_message(monkeypatch):
     async def run():
-        calls = []
+        sent, notes = [], []
+        async def stream(self, context):
+            sent.append(self.build_chat_completion_params({'messages': context.get_messages()})['messages'])
+            return Stream()
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', stream)
+        monkeypatch.setattr(routing, 'turn_note', lambda text, **kw: notes.append((text, kw)) or 'NOTE')
+        service = routing.RoutedLLMService('s1')
+        context = _context()
+        out = await service.get_chat_completions(context)
+        [chunk async for chunk in out]
+        assert notes == [('hi', {'session_id': 's1', 'turns': 1})]
+        assert sent[0][-1]['content'] == 'hi\n\nNOTE'
+        assert context.get_messages()[-1]['content'] == 'hi'
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_recall_searches_the_last_two_user_turns(monkeypatch):
+    async def run():
+        notes = []
         async def stream(self, context):
             return Stream()
         monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', stream)
-        monkeypatch.setattr(routing, 'render_system_prompt', lambda **kw: calls.append(kw) or 'p')
+        monkeypatch.setattr(routing, 'turn_note', lambda text, **kw: notes.append(text) or 'NOTE')
         service = routing.RoutedLLMService('s1')
-        out = await service.get_chat_completions(_context())
+        context = LLMContext(messages=[
+            {'role': 'user', 'content': 'read my to-do list'},
+            {'role': 'assistant', 'content': 'Shall I proceed?'},
+            {'role': 'user', 'content': 'Yes.'},
+        ])
+        out = await service.get_chat_completions(context)
         [chunk async for chunk in out]
-        assert calls[-1] == {'surface': 'voice', 'session_id': 's1', 'turns': 1}
+        assert notes == ['read my to-do list Yes.']
         await service.cleanup()
     asyncio.run(run())
