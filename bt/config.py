@@ -10,12 +10,27 @@ actually read.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass, field
 
 
 def _env_flag(name: str) -> bool:
 	return os.environ.get(name, "") == "1"
+
+
+# Tailscale's IPv4 (CGNAT) and IPv6 ranges.
+_TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+
+
+def _private_bind(host: str) -> bool:
+	if host == "localhost":
+		return True
+	try:
+		address = ipaddress.ip_address(host)
+	except ValueError:
+		return False
+	return address.is_loopback or any(address in net for net in _TAILNET)
 
 
 def _dev_ui_default() -> bool:
@@ -56,6 +71,11 @@ class Config:
 	# Developer toolings
 	developer_mode: bool = field(default_factory=lambda: _env_flag("BT_DEVELOPER_MODE"))
 	dev_ui_enabled: bool = field(default_factory=_dev_ui_default)
+
+	def validate_access(self) -> None:
+		# BT has no login; the tailnet is the access boundary, so never listen beyond it.
+		if not _private_bind(self.host):
+			raise ValueError("BT_HOST must be loopback or a Tailscale address")
 
 	# Ollama serves a native API at /api and an OpenAI-compatible one at /v1.
 	# Callers pick the path so BT_OLLAMA_URL stays the only host setting.

@@ -1,0 +1,30 @@
+:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #edf1f2; background: #172c3b; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header, main { width: min(100% - 32px, 820px); margin: auto; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 24px 0 16px; }
+h1 { font-size: 30px; letter-spacing: -.04em; margin: 0; }
+h1 span { font-size: 14px; color: #b6c8d2; letter-spacing: 0; font-weight: 400; margin-left: 16px; }
+button, input, textarea, select { font: inherit; border: 1px solid #65808f; border-radius: 8px; color: inherit; background: #203c4d; padding: 12px; min-height: 44px; }
+button { cursor: pointer; font-weight: 600; }
+button:hover { background: #345667; }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 3px solid #f2bf79; outline-offset: 3px; }
+nav { display: flex; align-items: center; gap: 10px; }
+nav select { flex: 1; min-width: 0; }
+#log { height: max(260px, calc(100dvh - 390px)); overflow-y: auto; margin: 20px 0; padding: 0 4px; }
+.turn { margin: 0 0 24px; max-width: 70ch; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.turn b { display: block; color: #b6c8d2; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.turn.user { border-left: 3px solid #f2bf79; padding-left: 14px; }
+.empty, .hint, #status { color: #b6c8d2; line-height: 1.5; }
+#chat { display: flex; gap: 10px; align-items: stretch; }
+textarea { resize: vertical; width: 100%; background: #112330; }
+#send { background: #edbd7d; color: #172c3b; border-color: #edbd7d; }
+.voice { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+#talk { touch-action: none; user-select: none; -webkit-user-select: none; }
+#talk[aria-pressed="true"] { background: #edbd7d; color: #172c3b; }
+.hint { font-size: 13px; }
+#status { min-height: 24px; padding-bottom: env(safe-area-inset-bottom); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+[hidden] { display: none !important; }
+@media (max-width: 520px) { h1 span { display: block; margin: 4px 0 0; } nav label { display: none; } .voice button { flex: 1; } #log { height: max(230px, calc(100dvh - 420px)); } }

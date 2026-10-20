@@ -10,3 +10,5 @@ result
 !.env.example
 .DS_Store
 
+
+/.nix-runtime*

@@ -45,14 +45,19 @@ class JSONFrameSerializer(FrameSerializer):
 		return None
 
 	async def deserialize(self, data: str | bytes) -> Frame | None:
+		if len(data) > 64000:
+			return None
 		try:
 			message = json.loads(data)
-		except (ValueError, TypeError):
+			if not isinstance(message, dict) or message.get("type") != "audio":
+				return None
+			rate = message.get("sampleRate", 16000)
+			channels = message.get("channels", 1)
+			if type(rate) is not int or rate != 16000 or type(channels) is not int or channels != 1:
+				return None
+			audio = base64.b64decode(message["pcm"], validate=True)
+			if not audio or len(audio) % 2 or len(audio) > 32000:
+				return None
+			return InputAudioRawFrame(audio=audio, sample_rate=rate, num_channels=channels)
+		except (ValueError, TypeError, KeyError):
 			return None
-		if message.get("type") != "audio":
-			return None
-		return InputAudioRawFrame(
-			audio=base64.b64decode(message["pcm"]),
-			sample_rate=message.get("sampleRate", self._sample_rate),
-			num_channels=message.get("channels", 1),
-		)
