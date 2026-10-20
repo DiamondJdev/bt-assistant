@@ -128,6 +128,9 @@ memory — appear below. Treat them as current and as higher priority than
 anything you recall from training. If a fact you need is absent, ask or say you
 cannot determine it. Do not fabricate it.
 
+The current time, the session, and stored memories matching the request arrive
+as turn context at the end of the Pilot's latest message. Treat them the same way.
+
 <!-- bt:context -->
 
 ## Output contract

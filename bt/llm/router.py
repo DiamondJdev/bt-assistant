@@ -17,7 +17,7 @@ import openai
 from openai import AsyncOpenAI
 
 from bt.config import CONFIG
-from bt.personality.system_prompt import render_system_prompt
+from bt.personality.system_prompt import render_system_prompt, turn_note, with_turn_note
 from bt.tools.registry import ToolContext, dispatch_call, openai_tools
 
 from pipecat.processors.aggregators.llm_context import LLMContextMessage
@@ -136,8 +136,8 @@ async def respond(
 
 	current = _provider("openai" if escalated else "ollama")
 	working: list[Any] = [
-		{"role": "system", "content": render_system_prompt(surface="text", session_id=session_id, turns=_user_turns(messages))},
-		*messages,
+		{"role": "system", "content": render_system_prompt(surface="text")},
+		*with_turn_note(messages, turn_note(user_text, session_id=session_id, turns=_user_turns(messages))),
 	]
 	tools = openai_tools() if ctx is not None and CONFIG.tools_enabled else None
 

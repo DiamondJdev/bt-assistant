@@ -16,6 +16,7 @@ from pathlib import Path
 from num2words import num2words
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.frames.frames import TTSSpeakFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -61,6 +62,9 @@ async def speak_years(text: str, _aggregation_type: str) -> str:
 # Years run last so dates are already expanded by VoiceFormatter.
 TEXT_TRANSFORMS = [("*", VoiceFormatter()), ("*", speak_years)]
 
+# Spoken when the model calls a tool, which costs a second model pass.
+ACK_TEXT = "Checking."
+
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
 
@@ -87,6 +91,13 @@ def create_speech_services():
 	return stt, tts
 
 
+def acknowledge_tool_calls(llm, tts) -> None:
+	# Kept out of the context so the model never sees or imitates it.
+	@llm.event_handler("on_function_calls_started")
+	async def acknowledge(_service, _calls):
+		await tts.queue_frame(TTSSpeakFrame(ACK_TEXT, append_to_context=False))
+
+
 def build_worker(websocket, session_id: str, history, speech_services, on_disconnect) -> PipelineWorker:
 	transport = FastAPIWebsocketTransport(
 		websocket=websocket,
@@ -107,6 +118,8 @@ def build_worker(websocket, session_id: str, history, speech_services, on_discon
 	stt, tts = speech_services
 	llm = RoutedLLMService(session_id)
 	tools = pipecat_tools() if CONFIG.tools_enabled else None
+	if tools:
+		acknowledge_tool_calls(llm, tts)
 
 	# Conversation history
 	context = (

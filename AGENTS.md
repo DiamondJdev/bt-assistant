@@ -24,5 +24,6 @@ Keep this section updated with mistakes you've made or behaviors that future age
 - Text and voice use separate model paths. Check both when changing routing; editing direct STT/TTS helpers does not change the Pipecat voice pipeline.
 - Configuration is cached. Load environment variables before first access and restart after changing settings. `.env.example` enables voice and developer tooling despite their code defaults being off.
 - The local Qwen3 model (no_think) rarely chains a second tool call; it announces the next step and stops. Make one tool call return everything the answer needs (memory_search returns bodies for this reason).
+- Keep the system prompt stable. Per-turn facts (time, turn, recalled memories) go on the latest user message via `turn_note`; a changing system prompt makes Ollama re-read the tools and whole history every turn.
 
 Keep this section short. Add concrete mistakes and their fixes as they occur; never include secrets or private transcripts.

@@ -11,7 +11,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 
 from bt.config import CONFIG
 from bt.llm.router import wants_escalation
-from bt.personality.system_prompt import render_system_prompt
+from bt.personality.system_prompt import render_system_prompt, turn_note, with_turn_note
 
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
 # ~4k tokens at ~4 chars/token: with the ~2.3k-token prompt it leaves room for a reply in an 8k context.
@@ -49,9 +49,24 @@ async def _timed(stream) -> AsyncIterator:
 		yield chunk
 
 
-class RoutedLLMService(OLLamaLLMService):
+class _TurnNoted:
+	# Per-turn facts ride on the outgoing request only, so the stored context stays clean.
+	turn_note = ""
+
+	def build_chat_completion_params(self, params_from_context) -> dict:
+		params = super().build_chat_completion_params(params_from_context)
+		if not self.turn_note:
+			return params
+		return {**params, "messages": with_turn_note(params["messages"], self.turn_note)}
+
+
+class CloudLLMService(_TurnNoted, OpenAILLMService):
+	pass
+
+
+class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 	def __init__(self, session_id: str | None = None) -> None:
-		system = render_system_prompt(surface="voice", session_id=session_id)
+		system = render_system_prompt(surface="voice")
 		super().__init__(
 			base_url=CONFIG.ollama_url("v1"),
 			settings=self.Settings(model=CONFIG.ollama_model, system_instruction=system + NO_THINK),
@@ -59,7 +74,7 @@ class RoutedLLMService(OLLamaLLMService):
 		self.session_id = session_id
 		self.compute = "ollama"
 		self._cloud = (
-			OpenAILLMService(
+			CloudLLMService(
 				api_key=CONFIG.openai_api_key,
 				settings=OpenAILLMService.Settings(model=CONFIG.openai_model, system_instruction=system, max_completion_tokens=1024),
 			)
@@ -67,19 +82,22 @@ class RoutedLLMService(OLLamaLLMService):
 			else None
 		)
 
-	def _refresh_prompt(self, context: LLMContext) -> None:
+	def _refresh_prompt(self, context: LLMContext, user_text: str) -> None:
 		# No public per-turn hook: set pipecat's base and recompose so addons and later recomposes keep it.
+		# The prompt only changes when memories do; per-turn facts go in the turn note.
 		turns = sum(1 for m in context.get_messages() if m.get("role") == "user")
-		system = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
+		system = render_system_prompt(surface="voice")
+		note = turn_note(user_text, session_id=self.session_id, turns=turns)
 		for service in (self, self._cloud):
 			if service is not None:
 				service._base_system_instruction = system + (NO_THINK if service is self else "")
 				service._compose_system_instruction()
+				service.turn_note = note
 
 	async def get_chat_completions(self, context: LLMContext) -> AsyncIterator:
-		self._refresh_prompt(context)
-		_trim(context)
 		user_text = next((m.get("content", "") for m in reversed(context.get_messages()) if m.get("role") == "user"), "")
+		self._refresh_prompt(context, user_text if isinstance(user_text, str) else "")
+		_trim(context)
 		use_cloud = isinstance(user_text, str) and wants_escalation(user_text)
 
 		async def chunks():

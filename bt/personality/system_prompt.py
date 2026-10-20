@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import logging
 import platform
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 
 from bt.config import CONFIG
-from bt.library import get_memory
+from bt.library import get_memory, recall
 
 log = logging.getLogger("bt.personality")
 
@@ -21,6 +21,7 @@ SOUL_PATH = Path(__file__).with_name("SOUL.md")
 TOOLS_MARKER = "<!-- bt:tools -->"
 CONTEXT_MARKER = "<!-- bt:context -->"
 NO_TOOLS = "No tools are available."
+RECALL_LIMIT = 3
 
 _SOUL: str | None = None
 
@@ -36,13 +37,11 @@ def render_system_prompt(
 	surface: str = "text",
 	tools: Sequence[str] | None = None,
 	context: Sequence[str] | None = None,
-	session_id: str | None = None,
-	turns: int | None = None,
 ) -> str:
 	if tools is None:
 		tools = _tool_lines(surface)
 	if context is None:
-		context = situation(surface, session_id, turns)
+		context = situation(surface)
 	return _soul().replace(TOOLS_MARKER, "\n".join(tools) or NO_TOOLS).replace(
 		CONTEXT_MARKER, "\n".join(context)
 	)
@@ -57,12 +56,10 @@ def _tool_lines(surface: str) -> list[str]:
 
 	return manifest_lines(surface)
 
-# This populates situation context without requiring a full tool-call
-def situation(surface: str, session_id: str | None = None, turns: int | None = None) -> list[str]:
-	now = datetime.now().astimezone()
+# Facts that hold for the whole session. Anything that changes per turn goes in turn_note,
+# because a changed system prompt makes Ollama re-read the tool list and history.
+def situation(surface: str) -> list[str]:
 	lines = [
-		f"The current date and time is {now.strftime('%H:%M on %A, %d %B %Y')}, "
-		f"timezone {now.tzname()}.",
 		f"You are running on {platform.node()}, a {platform.system()} host.",
 		f"Your local model is {CONFIG.ollama_model}.",
 		"This turn is spoken aloud."
@@ -71,12 +68,37 @@ def situation(surface: str, session_id: str | None = None, turns: int | None = N
 	]
 	if CONFIG.operator_name:
 		lines.append(f"Your operator is {CONFIG.operator_name}.")
+	return lines + _memory_lines()
+
+
+# Per-turn facts and the memories matching the request, so reads need no tool call.
+def turn_note(user_text: str, *, session_id: str | None = None, turns: int | None = None) -> str:
+	now = datetime.now().astimezone()
+	lines = [
+		"Turn context, added by the system and not spoken by the Pilot.",
+		f"The current date and time is {now.strftime('%H:%M on %A, %d %B %Y')}, timezone {now.tzname()}.",
+	]
 	if session_id:
 		lines.append(f"Session {session_id}, turn {turns}." if turns else f"Session {session_id}.")
+	try:
+		found = get_memory().search(user_text, limit=RECALL_LIMIT)
+	except OSError:
+		log.warning("could not search the memory directory")
+		found = []
+	if found:
+		lines.append("Stored memories matching this request. " + recall(found))
+	return " ".join(lines)
 
-	for line in _memory_lines():
-		lines.append(line)
-	return lines
+
+# The end of the latest user message is the only spot after the cached system prompt, tools and history.
+def with_turn_note(messages: Sequence[Mapping], note: str) -> list[Mapping]:
+	last = max((i for i, m in enumerate(messages) if m.get("role") == "user"), default=None)
+	if last is None or not isinstance(messages[last].get("content"), str):
+		return list(messages)
+	return [
+		{**m, "content": f"{m['content']}\n\n{note}"} if i == last else m
+		for i, m in enumerate(messages)
+	]
 
 
 def _memory_lines() -> list[str]:
@@ -87,7 +109,7 @@ def _memory_lines() -> list[str]:
 		return []
 	if not index:
 		return ["You have no stored memories yet."]
-	return ["These memories are stored. Only the titles are shown below, not the contents. Call memory_search before answering anything about one."] + index
+	return ["These memories are stored. Only the titles are shown below. Memories matching the latest request are attached to it as turn context; for any other, call memory_search before answering about it."] + index
 
 
 def __getattr__(name: str) -> str:

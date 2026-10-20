@@ -12,10 +12,12 @@ def test_text_path_sends_session_facts(monkeypatch):
     monkeypatch.setattr(router, '_complete', complete)
     history = [{'role': 'user', 'content': 'What time is it?'}]
     asyncio.run(router.respond(history, 'What time is it?', session_id='s1'))
-    system = seen[0][0]
-    assert system['role'] == 'system'
-    assert 'Session s1, turn 1.' in system['content']
-    assert 'The current date and time is' in system['content']
+    system, user = seen[0][0], seen[0][-1]
+    assert system['role'] == 'system' and 'Session s1' not in system['content']
+    assert user['content'].startswith('What time is it?')
+    assert 'Session s1, turn 1.' in user['content']
+    assert 'The current date and time is' in user['content']
+    assert history[0]['content'] == 'What time is it?'
 
 
 from dataclasses import replace

@@ -14,13 +14,12 @@ from pathlib import Path
 import httpx
 
 from bt.config import CONFIG
-from bt.library import MEMORY_TYPES
+from bt.library import MEMORY_TYPES, recall
 from bt.tools.registry import ToolContext, tool
 
 log = logging.getLogger("bt.tools")
 
 VOICE_SKILL_CHARS = 2000
-SEARCH_BODY_CHARS = 600
 
 # ------------------------------ enviroment processing ----------------------------------
 
@@ -114,14 +113,7 @@ async def memory_search(ctx: ToolContext, query: str) -> str:
 	found = ctx.memory.search(query)
 	if not found:
 		return f"No stored memory matches {query}."
-	# Bodies are included because the local model rarely chains a second call to memory_read.
-	return "Matching memories. " + " ".join(f"{m.name}: {m.description} {_clip(m.body)}" for m in found)
-
-
-def _clip(body: str) -> str:
-	# ponytail: fixed cap keeps five matches inside a 4096-token context; raise it with num_ctx
-	body = body.strip()
-	return body if len(body) <= SEARCH_BODY_CHARS else body[:SEARCH_BODY_CHARS].rstrip() + " (truncated; memory_read has the rest)"
+	return "Matching memories. " + recall(found)
 
 
 @tool(
