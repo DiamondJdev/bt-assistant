@@ -77,6 +77,17 @@ struct ChatModelTests {
         #expect(factory.made.count == 1)
     }
 
+    @Test func errorFrameReloadsHistoryToDropUnsavedMessages() async throws {
+        let model = makeModel()
+        await model.select("s1")
+        _ = await sendHi(model)
+        #expect(model.turns.count == 2)
+
+        factory.made.last!.push(.error("Conversation is busy. Disconnect voice or wait for the current reply."))
+        try await waitUntil { model.turns == api.turns }
+        #expect(model.errorMessage == "Conversation is busy. Disconnect voice or wait for the current reply.")
+    }
+
     @Test func droppedSocketReconnectsOnTheNextSend() async throws {
         let model = makeModel()
         let socket = await sendHi(model)

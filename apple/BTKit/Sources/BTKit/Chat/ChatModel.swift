@@ -133,6 +133,12 @@ public final class ChatModel {
         case .error(let message):
             errorMessage = message
             streamingText = nil
+            // A rejected message may not have been saved; the server's history is the truth.
+            if let id = selectedSessionID, let endpoints,
+               let history = try? await makeAPI(endpoints).history(sessionID: id),
+               selectedSessionID == id {
+                turns = history
+            }
         case .unknown:
             break
         }
