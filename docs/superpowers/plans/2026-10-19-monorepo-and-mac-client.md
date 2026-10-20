@@ -74,9 +74,12 @@ Phases 4 and 5 are complete as of October 20, 2026, from [the hotkey and chat de
 
 Verification: 118 Python tests and 68 package tests pass, and the Debug build succeeds. The hotkey and a chat session against a live server still need a hand check by the owner.
 
-Next: Phase 6, context layer. See [the Apple client README](../../../apple/README.md) for build and test commands.
+Phases 6 and 7 are complete as of October 20, 2026, from [the context and coding design](../specs/2026-10-20-context-and-coding-design.md), [the context layer plan](2026-10-20-context-layer.md) and [the coding tracker plan](2026-10-20-coding-tracker.md). They were built in parallel against a shared tool contract: `ToolDefinition` carries a JSON Schema and an approval flag, and `ToolModule.call` runs a tool. The Mac now sends a `hello` with every module's tools and a context string built from the snapshots in sidebar order, under a 2000-character budget. Pomodoro and Calendar tools run from chat. Their writes (`focus_start`, `focus_pause`, `focus_stop` and the three calendar writes) wait for an approval card, and the server waits 120 seconds for a client tool. A VS Code extension in `editors/vscode/` appends heartbeats to `~/.bt/inbox/`. The app ingests them, splits sessions after 15 minutes idle, and shows a Coding pane with a seven-day chart, two `coding_*` tools and a snapshot.
+
+Verification: 135 package tests, 118 Python tests and 5 extension tests pass, and the Debug build succeeds. Still to check by hand: the approval cards and a live chat using the tools, calendar writes through EventKit (including repeating events and read-only calendars), and the extension end to end into the running app.
+
+Next: Phase 8, Today view and events. See [the Apple client README](../../../apple/README.md) for build and test commands.
 
 ## Open questions
 
-- Coding idle threshold: 5 minutes, or longer to count reading time?
-- Track NixOS coding time in v1, or later?
+None open. The owner chose a 15-minute coding idle cutoff and Mac-only tracking for now; NixOS coding time comes later.
