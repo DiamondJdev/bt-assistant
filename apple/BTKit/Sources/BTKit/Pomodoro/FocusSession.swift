@@ -24,7 +24,7 @@ final class FocusSession {
 
 /// Every SwiftData model in BTKit, for building the app's one `ModelContainer`.
 public enum BTModels {
-    public static let all: [any PersistentModel.Type] = [FocusSession.self]
+    public static let all: [any PersistentModel.Type] = [FocusSession.self, CodingHeartbeat.self]
 }
 
 @MainActor
