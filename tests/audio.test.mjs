@@ -23,3 +23,9 @@ test('interruption stops every queued audio source', () => {
   assert.equal(player.sources.size, 0);
   assert.equal(player.playAt, 0);
 });
+
+test('mic level is silent for zeros and saturates for loud input', async () => {
+  const { level } = await import('../bt/client/audio.mjs');
+  assert.equal(level(new Int16Array(512).buffer), 0);
+  assert.equal(level(new Int16Array(512).fill(32767).buffer), 1);
+});

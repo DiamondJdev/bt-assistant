@@ -79,3 +79,12 @@ def test_readiness_checks_model_and_reports_dependency_failure(client, monkeypat
         return httpx.Response(200, json={'models': []})
     monkeypatch.setattr(gateway.httpx, 'AsyncClient', lambda **kw: original(transport=httpx.MockTransport(no_models), **kw))
     assert client.get('/ready').status_code == 503
+    assert client.get('/ready').json()['reason'] == 'Model qwen3:8b is not installed'
+    async def down(request):
+        raise httpx.ConnectError('refused')
+    monkeypatch.setattr(gateway.httpx, 'AsyncClient', lambda **kw: original(transport=httpx.MockTransport(down), **kw))
+    assert client.get('/ready').json()['reason'] == 'Ollama is not reachable'
+
+
+def test_config_reports_model_for_status_display(client):
+    assert client.get('/config').json()['model'] == gateway.CONFIG.ollama_model

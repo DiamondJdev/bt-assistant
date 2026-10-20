@@ -97,15 +97,22 @@ async def ready() -> dict | JSONResponse:
 			response.raise_for_status()
 		names = {m["name"] for m in response.json()["models"]}
 		if CONFIG.ollama_model not in names and f"{CONFIG.ollama_model}:latest" not in names:
-			raise ValueError("Configured Ollama model is not installed")
+			return _unavailable(f"Model {CONFIG.ollama_model} is not installed")
 		return {"status": "ready", "voice_enabled": CONFIG.voice_enabled}
-	except (httpx.HTTPError, ValueError, KeyError, TypeError, OSError, RuntimeError, sqlite3.Error):
-		return JSONResponse({"status": "unavailable"}, status_code=503)
+	except httpx.HTTPError:
+		return _unavailable("Ollama is not reachable")
+	except (ValueError, KeyError, TypeError, OSError, RuntimeError, sqlite3.Error):
+		log.exception("readiness check failed")
+		return _unavailable("Server check failed")
+
+
+def _unavailable(reason: str) -> JSONResponse:
+	return JSONResponse({"status": "unavailable", "reason": reason}, status_code=503)
 
 
 @app.get("/config")
-def config() -> dict[str, bool]:
-	return {"voice_enabled": CONFIG.voice_enabled}
+def config() -> dict[str, bool | str]:
+	return {"voice_enabled": CONFIG.voice_enabled, "model": CONFIG.ollama_model}
 
 
 @app.get("/sessions")
