@@ -122,7 +122,7 @@ public final class PomodoroModule: ToolModule {
     }
 
     public var content: AnyView {
-        AnyView(Text("Pomodoro"))
+        AnyView(PomodoroView(module: self))
     }
 
     /// Waits for queued notification work; used by tests.
