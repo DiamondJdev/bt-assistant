@@ -74,12 +74,16 @@ struct ChatView: View {
                         if let streaming = model.streamingText {
                             TurnBubble(text: streaming.isEmpty ? "…" : streaming, isUser: false, isCloud: false)
                         }
+                        ForEach(model.pendingApprovals) { approval in
+                            ApprovalCard(approval: approval, model: model)
+                        }
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding()
                 }
                 .onChange(of: model.turns.count) { proxy.scrollTo("bottom") }
                 .onChange(of: model.streamingText) { proxy.scrollTo("bottom") }
+                .onChange(of: model.pendingApprovals.count) { proxy.scrollTo("bottom") }
             }
             if let error = model.errorMessage {
                 HStack {
@@ -103,6 +107,33 @@ struct ChatView: View {
             }
             .padding(10)
         }
+    }
+}
+
+/// A tool call waiting for the owner's answer.
+private struct ApprovalCard: View {
+    let approval: ToolApproval
+    let model: ChatModel
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(approval.summary).font(.headline)
+                ForEach(approval.arguments, id: \.self) { line in
+                    Text(line).font(.callout.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                HStack {
+                    Spacer()
+                    Button("Deny") { Task { await model.deny(approval.id) } }
+                    Button("Approve") { Task { await model.approve(approval.id) } }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Label("BT wants to run \(approval.toolName)", systemImage: "hand.raised")
+        }
+        .frame(maxWidth: 420, alignment: .leading)
     }
 }
 

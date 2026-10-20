@@ -1,6 +1,17 @@
 import Foundation
 import Observation
 
+/// A tool call waiting for the owner, shown as a card in the chat pane.
+public struct ToolApproval: Identifiable, Equatable {
+    /// The server's call id.
+    public let id: String
+    public let toolName: String
+    /// The tool's description, which names it in plain words.
+    public let summary: String
+    /// Sorted `key: value` lines.
+    public let arguments: [String]
+}
+
 /// Conversation list, history and one streaming socket for the BT pane.
 /// The socket opens on the first send and reopens on the next send after it drops.
 @MainActor
@@ -31,10 +42,16 @@ public final class ChatModel {
     public private(set) var streamingText: String?
     public private(set) var errorMessage: String?
     public var isSending: Bool { streamingText != nil }
+    /// Modules whose tools are offered in `hello` and whose snapshots, in this order, become each
+    /// message's context. Set by the app once the sidebar exists.
+    public var modules: [any ToolModule] = []
+    public private(set) var pendingApprovals: [ToolApproval] = []
 
     private let makeAPI: (ChatEndpoints) -> any ChatAPI
     private let makeSocket: (URL) -> any ChatSocket
     private var socket: (any ChatSocket)?
+    /// What each pending approval needs to run once the owner answers.
+    private var waitingCalls: [String: WaitingCall] = [:]
 
     public init(
         makeAPI: @escaping (ChatEndpoints) -> any ChatAPI = URLSessionChatAPI.init,
@@ -89,7 +106,8 @@ public final class ChatModel {
         errorMessage = nil
         streamingText = ""
         do {
-            try await connectedSocket(endpoints).send(.message(text: text, context: nil))
+            let context = contextSnapshot(modules.map(\.snapshot))
+            try await connectedSocket(endpoints).send(.message(text: text, context: context))
         } catch {
             dropSocket()
             turns.removeAll { $0.id == local.id }
@@ -104,7 +122,64 @@ public final class ChatModel {
         let socket = makeSocket(endpoints.socketURL(sessionID: selectedSessionID))
         self.socket = socket
         Task { await receiveLoop(socket) }
+        // The server keeps tools per connection, so every new socket offers them first.
+        try await socket.send(.hello(tools: modules.flatMap(\.tools)))
         return socket
+    }
+
+    /// Runs a waiting call and sends its result. Does nothing once the card is gone.
+    public func approve(_ id: String) async {
+        guard let call = takeWaitingCall(id) else { return }
+        await run(call.module, call.name, call.args, id: id, socket: call.socket)
+    }
+
+    /// Tells the server the owner declined a waiting call. Does nothing once the card is gone.
+    public func deny(_ id: String) async {
+        guard let call = takeWaitingCall(id) else { return }
+        await reply(.toolResult(id: id, ok: false, content: "The owner declined this action."), on: call.socket)
+    }
+
+    private func takeWaitingCall(_ id: String) -> WaitingCall? {
+        pendingApprovals.removeAll { $0.id == id }
+        return waitingCalls.removeValue(forKey: id)
+    }
+
+    private func handleToolCall(id: String, name: String, args: JSONValue, from socket: any ChatSocket) async {
+        guard let module = modules.first(where: { $0.tools.contains { $0.name == name } }),
+              let tool = module.tools.first(where: { $0.name == name })
+        else {
+            await reply(.toolResult(id: id, ok: false, content: ToolError.unknownTool(name).localizedDescription), on: socket)
+            return
+        }
+        guard tool.needsApproval else {
+            await run(module, name, args, id: id, socket: socket)
+            return
+        }
+        waitingCalls[id] = WaitingCall(module: module, name: name, args: args, socket: socket)
+        pendingApprovals.append(ToolApproval(id: id, toolName: name, summary: tool.description, arguments: argumentLines(args)))
+    }
+
+    private func run(_ module: any ToolModule, _ name: String, _ args: JSONValue, id: String, socket: any ChatSocket) async {
+        let result: ClientFrame
+        do {
+            let prose = try await module.call(name, arguments: JSONEncoder().encode(args))
+            result = .toolResult(id: id, ok: true, content: prose)
+        } catch {
+            result = .toolResult(id: id, ok: false, content: error.localizedDescription)
+        }
+        await reply(result, on: socket)
+    }
+
+    /// Sends on the socket the call came from; a result for a dropped socket has nowhere to go.
+    private func reply(_ frame: ClientFrame, on socket: any ChatSocket) async {
+        guard self.socket === socket else { return }
+        // A failed write means the socket is going; the receive loop reports the lost connection.
+        try? await socket.send(frame)
+    }
+
+    private func clearApprovals() {
+        pendingApprovals = []
+        waitingCalls = [:]
     }
 
     private func receiveLoop(_ socket: any ChatSocket) async {
@@ -115,6 +190,7 @@ public final class ChatModel {
             } catch {
                 guard self.socket === socket else { return }
                 self.socket = nil
+                clearApprovals()
                 if isSending {
                     streamingText = nil
                     errorMessage = Self.lostConnection
@@ -135,16 +211,21 @@ public final class ChatModel {
         case .done(let text, let compute, _):
             turns.append(ChatTurn(id: UUID().uuidString, ts: Date().timeIntervalSince1970, role: "bt", text: text, compute: compute))
             streamingText = nil
+            // The server stopped waiting; a late answer would go nowhere.
+            clearApprovals()
             await loadSessions()
         case .error(let message):
             errorMessage = message
             streamingText = nil
+            clearApprovals()
             // A rejected message may not have been saved; the server's history is the truth.
             if let id = selectedSessionID, let endpoints,
                let history = try? await makeAPI(endpoints).history(sessionID: id),
                selectedSessionID == id {
                 turns = history
             }
+        case .toolCall(let id, let name, let args):
+            await handleToolCall(id: id, name: name, args: args, from: socket)
         case .unknown:
             break
         }
@@ -157,8 +238,30 @@ public final class ChatModel {
 
     private func reset() {
         dropSocket()
+        clearApprovals()
         turns = []
         streamingText = nil
         errorMessage = nil
+    }
+}
+
+private struct WaitingCall {
+    let module: any ToolModule
+    let name: String
+    let args: JSONValue
+    let socket: any ChatSocket
+}
+
+/// Sorted `key: value` lines for an approval card; strings print bare, anything else as JSON.
+private func argumentLines(_ args: JSONValue) -> [String] {
+    guard case .object(let fields) = args else { return [] }
+    return fields.keys.sorted().map { key in
+        let value: String
+        if case .string(let text) = fields[key] {
+            value = text
+        } else {
+            value = (try? JSONEncoder().encode(fields[key])).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }
+        return "\(key): \(value)"
     }
 }

@@ -15,10 +15,12 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
     case delta(String)
     case done(text: String, compute: String, toolsUsed: [String])
     case error(String)
+    /// A call to one of the tools offered in `hello`; answer with `ClientFrame.toolResult`.
+    case toolCall(id: String, name: String, args: JSONValue)
     case unknown
 
     private enum CodingKeys: String, CodingKey {
-        case type, sessionId, text, compute, toolsUsed, message
+        case type, sessionId, text, compute, toolsUsed, message, id, name, args
     }
 
     public init(from decoder: any Decoder) throws {
@@ -36,26 +38,48 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
             )
         case "error":
             self = .error(try c.decode(String.self, forKey: .message))
+        case "tool_call":
+            var args = (try? c.decode(JSONValue.self, forKey: .args)) ?? [:]
+            if case .object = args {} else { args = [:] }
+            self = .toolCall(id: try c.decode(String.self, forKey: .id), name: try c.decode(String.self, forKey: .name), args: args)
         default:
             self = .unknown
         }
     }
 }
 
-/// A frame to the server. `hello` and `tool_result` arrive with phase 6 tools; the server
+/// A frame to the server. `hello` offers the modules' tools on every connect; the server
 /// never sends `tool_call` to a client that offered none.
 public enum ClientFrame: Encodable, Equatable, Sendable {
+    case hello(tools: [ToolDefinition])
     case message(text: String, context: String?)
+    case toolResult(id: String, ok: Bool, content: String)
 
-    private enum CodingKeys: String, CodingKey { case type, text, context }
+    private enum CodingKeys: String, CodingKey { case type, tools, text, context, id, ok, content }
+    private enum ToolKeys: String, CodingKey { case name, description, parameters }
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case .hello(let tools):
+            try c.encode("hello", forKey: .type)
+            // `needsApproval` stays on the Mac.
+            var list = c.nestedUnkeyedContainer(forKey: .tools)
+            for tool in tools {
+                var t = list.nestedContainer(keyedBy: ToolKeys.self)
+                try t.encode(tool.name, forKey: .name)
+                try t.encode(tool.description, forKey: .description)
+                try t.encode(tool.parameters, forKey: .parameters)
+            }
         case .message(let text, let context):
             try c.encode("message", forKey: .type)
             try c.encode(text, forKey: .text)
             try c.encodeIfPresent(context, forKey: .context)
+        case .toolResult(let id, let ok, let content):
+            try c.encode("tool_result", forKey: .type)
+            try c.encode(id, forKey: .id)
+            try c.encode(ok, forKey: .ok)
+            try c.encode(content, forKey: .content)
         }
     }
 }

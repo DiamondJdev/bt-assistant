@@ -21,7 +21,7 @@ log = logging.getLogger("bt.gateway")
 router = APIRouter()
 store = get_store()
 
-CLIENT_TOOL_TIMEOUT_SECS = 30.0
+CLIENT_TOOL_TIMEOUT_SECS = 120.0
 MAX_CONTEXT_CHARS = 4000
 TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 

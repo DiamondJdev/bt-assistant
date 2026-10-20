@@ -15,7 +15,8 @@ struct ChatWireTests {
     @Test func decodesEveryServerFrame() throws {
         #expect(try frame(#"{"type":"session","session_id":"s1"}"#) == .session(id: "s1"))
         #expect(try frame(#"{"type":"delta","text":"Hel"}"#) == .delta("Hel"))
-        #expect(try frame(#"{"type":"tool_call","id":"c1","name":"calendar_list_events","args":{}}"#) == .unknown)
+        #expect(try frame(#"{"type":"tool_call","id":"c1","name":"calendar_list_events","args":{}}"#)
+            == .toolCall(id: "c1", name: "calendar_list_events", args: [:]))
         #expect(try frame(#"{"type":"done","text":"Hello","compute":"ollama","tools_used":["memory_search"]}"#)
             == .done(text: "Hello", compute: "ollama", toolsUsed: ["memory_search"]))
         #expect(try frame(#"{"type":"error","message":"Wait for the current reply."}"#)
@@ -27,6 +28,32 @@ struct ChatWireTests {
         #expect(try object(.message(text: "Hi", context: nil)) == ["type": "message", "text": "Hi"] as NSDictionary)
         #expect(try object(.message(text: "Hi", context: "Pomodoro idle"))
             == ["type": "message", "text": "Hi", "context": "Pomodoro idle"] as NSDictionary)
+    }
+
+    @Test func toolCallArgsKeepNestedObjectsAndDefaultToEmpty() throws {
+        #expect(try frame(#"{"type":"tool_call","id":"c2","name":"x","args":{"a_b":{"c_d":[1,"two",true,null]}}}"#)
+            == .toolCall(id: "c2", name: "x", args: ["a_b": ["c_d": [1, "two", true, .null]]]))
+        #expect(try frame(#"{"type":"tool_call","id":"c3","name":"x"}"#) == .toolCall(id: "c3", name: "x", args: [:]))
+        #expect(try frame(#"{"type":"tool_call","id":"c4","name":"x","args":"oops"}"#) == .toolCall(id: "c4", name: "x", args: [:]))
+    }
+
+    @Test func encodesHelloWithoutTheApprovalFlag() throws {
+        let tool = ToolDefinition(name: "focus_start", description: "Start focus.",
+                                  parameters: ["type": "object", "properties": ["n": ["type": "integer"]]], needsApproval: true)
+        #expect(try object(.hello(tools: [tool])) == [
+            "type": "hello",
+            "tools": [[
+                "name": "focus_start",
+                "description": "Start focus.",
+                "parameters": ["type": "object", "properties": ["n": ["type": "integer"]]],
+            ]],
+        ] as NSDictionary)
+        #expect(try object(.hello(tools: [])) == ["type": "hello", "tools": []] as NSDictionary)
+    }
+
+    @Test func encodesToolResult() throws {
+        #expect(try object(.toolResult(id: "c1", ok: false, content: "No."))
+            == ["type": "tool_result", "id": "c1", "ok": false, "content": "No."] as NSDictionary)
     }
 
     @Test func endpointsHandleTrailingSlashesAndSchemes() throws {

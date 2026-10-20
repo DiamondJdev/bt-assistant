@@ -12,9 +12,10 @@ public final class PomodoroModule: ToolModule {
     public let symbol = "timer"
     public let tools: [ToolDefinition] = [
         ToolDefinition(name: "focus_get_status", description: "Current Pomodoro phase, time remaining, and minutes focused today."),
-        ToolDefinition(name: "focus_start", description: "Start or resume the Pomodoro timer."),
-        ToolDefinition(name: "focus_pause", description: "Pause the running Pomodoro phase."),
-        ToolDefinition(name: "focus_stop", description: "Stop the Pomodoro timer and log any work time of at least one minute."),
+        ToolDefinition(name: "focus_start", description: "Start or resume the Pomodoro timer.", needsApproval: true),
+        ToolDefinition(name: "focus_pause", description: "Pause the running Pomodoro phase.", needsApproval: true),
+        ToolDefinition(name: "focus_stop", description: "Stop the Pomodoro timer and log any work time of at least one minute.",
+                       needsApproval: true),
         ToolDefinition(name: "focus_get_stats", description: "Minutes focused today and over the past 7 days."),
     ]
 
@@ -123,6 +124,35 @@ public final class PomodoroModule: ToolModule {
 
     public var content: AnyView {
         AnyView(PomodoroView(module: self))
+    }
+
+    // MARK: Tools
+
+    /// Controls return the snapshot after the change so the model can confirm it in one call.
+    public func call(_ name: String, arguments: Data) async throws -> String {
+        switch name {
+        case "focus_start": start()
+        case "focus_pause": pause()
+        case "focus_stop": stop()
+        case "focus_get_status": break
+        case "focus_get_stats": return stats()
+        default: throw ToolError.unknownTool(name)
+        }
+        return snapshot ?? ""
+    }
+
+    /// Today's and the past seven days' totals, then one `Mon 19 Oct: 1h 35m` line per day, oldest first.
+    private func stats() -> String {
+        let calendar = Calendar.current
+        let today = now()
+        let week = log.totalFocused(lastDays: 7, endingOn: today, calendar: calendar)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE d MMM"
+        let days = (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+        let lines = days.map { "\(formatter.string(from: $0)): \(Self.format(log.totalFocused(on: $0, calendar: calendar)))" }
+        let summary = "Focused \(Self.format(todayFocused)) today and \(Self.format(week)) over the past 7 days."
+        return ([summary] + lines).joined(separator: "\n")
     }
 
     /// Waits for queued notification work; used by tests.
