@@ -36,7 +36,7 @@ def test_voice_refreshes_prompt_each_turn_on_both_services(monkeypatch):
         for text in ('hi', 'escalate'):
             out = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': text}]))
             [chunk async for chunk in out]
-        assert seen == [('RoutedLLMService', 'turn one'), ('OpenAILLMService', 'turn two')]
+        assert seen == [('RoutedLLMService', 'turn one' + routing.NO_THINK), ('OpenAILLMService', 'turn two')]
         await service.cleanup()
     asyncio.run(run())
 

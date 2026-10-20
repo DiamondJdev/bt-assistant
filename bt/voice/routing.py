@@ -13,6 +13,8 @@ from bt.personality.system_prompt import render_system_prompt
 
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
 MAX_MESSAGES = 50
+# Qwen3 soft switch; GGUF templates ignore reasoning_effort, and thinking ate the token budget.
+NO_THINK = "\n\n/no_think"
 
 
 def _trim(context: LLMContext) -> None:
@@ -42,7 +44,7 @@ class RoutedLLMService(OLLamaLLMService):
 		system = render_system_prompt(surface="voice", session_id=session_id)
 		super().__init__(
 			base_url=CONFIG.ollama_url("v1"),
-			settings=self.Settings(model=CONFIG.ollama_model, system_instruction=system),
+			settings=self.Settings(model=CONFIG.ollama_model, system_instruction=system + NO_THINK),
 		)
 		self.session_id = session_id
 		self.compute = "ollama"
@@ -61,7 +63,7 @@ class RoutedLLMService(OLLamaLLMService):
 		system = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
 		for service in (self, self._cloud):
 			if service is not None:
-				service._base_system_instruction = system
+				service._base_system_instruction = system + (NO_THINK if service is self else "")
 				service._compose_system_instruction()
 
 	async def get_chat_completions(self, context: LLMContext) -> AsyncIterator:
