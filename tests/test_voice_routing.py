@@ -124,3 +124,20 @@ def test_voice_history_trim_starts_on_user_turn(monkeypatch):
         assert messages[-1]['content'] == '60'
         await service.cleanup()
     asyncio.run(run())
+
+
+def test_voice_tool_call_only_reply_is_not_empty(monkeypatch):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]), finish_reason='tool_calls')])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+        local = ToolStream([])
+        async def local_stream(self, context):
+            return local
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        assert [chunk async for chunk in stream] == [call]
+        await service.cleanup()
+    asyncio.run(run())

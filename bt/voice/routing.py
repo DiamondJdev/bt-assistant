@@ -1,6 +1,7 @@
 """Local-first streaming with fallback before the first response token."""
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -13,6 +14,7 @@ from bt.personality.system_prompt import render_system_prompt
 
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
 MAX_MESSAGES = 50
+log = logging.getLogger("bt.voice.routing")
 # Qwen3 soft switch; GGUF templates ignore reasoning_effort, and thinking ate the token budget.
 NO_THINK = "\n\n/no_think"
 
@@ -86,8 +88,12 @@ class RoutedLLMService(OLLamaLLMService):
 							super(RoutedLLMService, self).get_chat_completions(context) if provider is self else provider.get_chat_completions(context)
 						)
 					async for chunk in _timed(stream):
-						if chunk.choices and chunk.choices[0].delta.content:
+						delta = chunk.choices[0].delta if chunk.choices else None
+						# A tool call is a valid reply even with no text.
+						if delta and (delta.content or getattr(delta, "tool_calls", None)):
 							emitted = True
+						if chunk.choices and getattr(chunk.choices[0], "finish_reason", None):
+							log.info("voice reply ended: finish_reason=%s", chunk.choices[0].finish_reason)
 						yield chunk
 					if not emitted:
 						raise ValueError("Provider returned an empty response")
