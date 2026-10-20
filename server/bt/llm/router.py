@@ -17,6 +17,7 @@ import openai
 from openai import AsyncOpenAI
 
 from bt.config import CONFIG
+from bt.llm.streaming import MAX_TOKENS, completion_kwargs  # noqa: F401 (MAX_TOKENS re-exported)
 from bt.personality.system_prompt import recent_user_text, render_system_prompt, turn_note, with_turn_note
 from bt.tools.registry import ToolContext, dispatch_call, openai_tools
 
@@ -32,7 +33,6 @@ ESCALATION_PHRASES = (
 	"escalate",
 )
 
-MAX_TOKENS = 2048
 LLM_TIMEOUT_SECS = 60
 
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
@@ -82,17 +82,7 @@ async def _complete(
 	tools: list[dict[str, Any]] | None = None,
 	tool_choice: str | None = None,
 ):
-	kwargs: dict[str, Any] = {"model": provider.model, "messages": messages}
-	if tools:
-		kwargs["tools"] = tools
-		if tool_choice:
-			kwargs["tool_choice"] = tool_choice
-	if provider.key == "openai":
-		kwargs["max_completion_tokens"] = MAX_TOKENS
-	else:
-		kwargs["max_tokens"] = MAX_TOKENS
-
-	resp = await provider.client.chat.completions.create(**kwargs)
+	resp = await provider.client.chat.completions.create(**completion_kwargs(provider, messages, tools, tool_choice))
 	if not resp.choices:
 		raise ValueError(f"{provider.key} returned no choices")
 	return resp.choices[0].message
