@@ -23,7 +23,7 @@ struct BTMacApp: App {
         let pomodoro = PomodoroModule(modelContext: container.mainContext, nowPlaying: MusicController())
         _pomodoro = State(initialValue: pomodoro)
         _clock = State(initialValue: PomodoroClock(pomodoro: pomodoro))
-        _sidebar = State(initialValue: ToolSidebarModel(modules: [BTModule(), pomodoro, CalendarModule()]))
+        _sidebar = State(initialValue: ToolSidebarModel(modules: [BTModule(chat: ChatModel()), pomodoro, CalendarModule()]))
     }
 
     var body: some Scene {
@@ -37,6 +37,10 @@ struct BTMacApp: App {
             PomodoroMenu(pomodoro: pomodoro)
         } label: {
             PomodoroMenuBarLabel(pomodoro: pomodoro, clock: clock, sidebar: sidebar, hotkey: hotkey)
+        }
+
+        Settings {
+            ChatSettingsView()
         }
     }
 }
