@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import BTKit
 
@@ -57,11 +58,109 @@ struct ChatModelTests {
         #expect(factory.urls == [URL(string: "wss://bt.example.ts.net/chat/ws?session_id=s1")!])
     }
 
-    @Test func firstSendSendsTheMessage() async {
+    @Test func firstSendSendsHelloThenTheMessage() async {
         let model = makeModel()
         let socket = await sendHi(model)
-        #expect(socket.sent == [.message(text: "Hi", context: nil)])
+        #expect(socket.sent == [.hello(tools: []), .message(text: "Hi", context: nil)])
         #expect(model.draft.isEmpty)
+    }
+
+    @Test func helloOffersEveryModuleToolAndMessageCarriesTheSnapshot() async {
+        let model = makeModel()
+        let tools = FakeToolModule(snapshot: "Tools ready")
+        model.modules = [BTModule(), tools, FakeToolModule(id: "quiet", snapshot: nil)]
+        let socket = await sendHi(model)
+        #expect(socket.sent.first == .hello(tools: tools.tools + FakeToolModule(id: "quiet").tools))
+        #expect(socket.sent.last == .message(text: "Hi", context: "Tools ready"))
+    }
+
+    @Test func nonApprovalCallRunsAndRepliesOK() async throws {
+        let model = makeModel()
+        let module = FakeToolModule()
+        model.modules = [module]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_read", args: ["q": "x"]))
+        try await waitUntil { socket.sent.count == 3 }
+        #expect(socket.sent.last == .toolResult(id: "c1", ok: true, content: "read {\"q\":\"x\"}"))
+        #expect(model.pendingApprovals.isEmpty)
+    }
+
+    @Test func approvalCallWaitsThenApproveReplies() async throws {
+        let model = makeModel()
+        model.modules = [FakeToolModule()]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_write", args: ["title": "Lab", "n": 2]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        #expect(model.pendingApprovals == [
+            ToolApproval(id: "c1", toolName: "fake_write", summary: "Write a thing.", arguments: ["n: 2", "title: Lab"]),
+        ])
+        #expect(socket.sent.count == 2)
+
+        await model.approve("c1")
+        #expect(model.pendingApprovals.isEmpty)
+        #expect(socket.sent.last == .toolResult(id: "c1", ok: true, content: "wrote"))
+    }
+
+    @Test func denyRepliesDeclined() async throws {
+        let model = makeModel()
+        let module = FakeToolModule()
+        model.modules = [module]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_write", args: [:]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+
+        await model.deny("c1")
+        #expect(model.pendingApprovals.isEmpty)
+        #expect(socket.sent.last == .toolResult(id: "c1", ok: false, content: "The owner declined this action."))
+        #expect(module.calls.isEmpty)
+    }
+
+    @Test func doneClearsAWaitingCardAndALateApproveSendsNothing() async throws {
+        let model = makeModel()
+        let module = FakeToolModule()
+        model.modules = [module]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_write", args: [:]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        socket.push(.done(text: "Timed out.", compute: "ollama", toolsUsed: []))
+        try await waitUntil { model.pendingApprovals.isEmpty }
+
+        await model.approve("c1")
+        await model.deny("c1")
+        #expect(socket.sent.count == 2)
+        #expect(module.calls.isEmpty)
+    }
+
+    @Test func unknownToolRepliesNotOK() async throws {
+        let model = makeModel()
+        model.modules = [FakeToolModule()]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "nope", args: [:]))
+        try await waitUntil { socket.sent.count == 3 }
+        #expect(socket.sent.last == .toolResult(id: "c1", ok: false, content: "No tool named nope."))
+    }
+
+    @Test func throwingToolRepliesWithItsDescription() async throws {
+        let model = makeModel()
+        model.modules = [FakeToolModule()]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_fail", args: [:]))
+        try await waitUntil { socket.sent.count == 3 }
+        #expect(socket.sent.last == .toolResult(id: "c1", ok: false, content: "Calendar access is off."))
+    }
+
+    @Test func resultForADroppedSocketIsDropped() async throws {
+        let model = makeModel()
+        let module = FakeToolModule()
+        model.modules = [module]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_write", args: [:]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        socket.fail()
+        try await waitUntil { model.errorMessage == "Lost connection to BT. Try again." }
+
+        await model.approve("c1")
+        #expect(socket.sent.count == 2)
     }
 
     @Test func errorFrameLeavesTheComposerUsable() async throws {
@@ -98,7 +197,7 @@ struct ChatModelTests {
         model.draft = "Still there?"
         await model.send()
         #expect(factory.made.count == 2)
-        #expect(factory.made[1].sent == [.message(text: "Still there?", context: nil)])
+        #expect(factory.made[1].sent == [.hello(tools: []), .message(text: "Still there?", context: nil)])
     }
 
     @Test func failedWriteRestoresTheDraft() async {
@@ -173,6 +272,37 @@ private final class FakeChatAPI: ChatAPI, @unchecked Sendable {
 }
 
 private struct SendFailed: Error {}
+
+@MainActor
+private final class FakeToolModule: ToolModule {
+    let id: String
+    let name = "Fake"
+    let symbol = "square"
+    let snapshot: String?
+    let tools: [ToolDefinition]
+    var calls: [String] = []
+
+    init(id: String = "fake", snapshot: String? = nil) {
+        self.id = id
+        self.snapshot = snapshot
+        tools = [
+            ToolDefinition(name: "\(id)_read", description: "Read a thing."),
+            ToolDefinition(name: "\(id)_write", description: "Write a thing.", needsApproval: true),
+            ToolDefinition(name: "\(id)_fail", description: "Fail."),
+        ]
+    }
+
+    var content: AnyView { AnyView(EmptyView()) }
+
+    func call(_ name: String, arguments: Data) async throws -> String {
+        calls.append(name)
+        switch name {
+        case "\(id)_read": return "read " + String(decoding: arguments, as: UTF8.self)
+        case "\(id)_write": return "wrote"
+        default: throw ToolError.failed("Calendar access is off.")
+        }
+    }
+}
 
 private final class FakeChatSocket: ChatSocket, @unchecked Sendable {
     private let lock = NSLock()
