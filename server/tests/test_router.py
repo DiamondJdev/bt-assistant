@@ -130,3 +130,93 @@ def test_empty_cloud_reply_raises(providers):
     providers(openai=[_reply('<think>only thoughts</think>')])
     with pytest.raises(ValueError):
         asyncio.run(router.respond([], 'escalate'))
+
+
+SERVER_TOOLS = [{'type': 'function', 'function': {'name': 'memory_search'}}]
+CLIENT_TOOL = {'type': 'function', 'function': {'name': 'calendar_list_events', 'parameters': {'type': 'object'}}}
+
+
+def test_streaming_forwards_deltas_and_returns_final_text(monkeypatch):
+    async def stream(provider, messages, tools=None, tool_choice=None, on_text=None):
+        await on_text('Hel')
+        await on_text('lo')
+        return _reply('Hello')
+    monkeypatch.setattr(router, 'stream_complete', stream)
+    deltas = []
+    async def on_delta(text):
+        deltas.append(text)
+    result = asyncio.run(router.respond([], 'hi', on_delta=on_delta))
+    assert deltas == ['Hel', 'lo'] and result.text == 'Hello'
+
+
+def test_mid_turn_escalation_stops_deltas(providers, monkeypatch):
+    providers()
+    seen = []
+    async def stream(provider, messages, tools=None, tool_choice=None, on_text=None):
+        seen.append((provider.key, on_text))
+        return _reply('' if provider.key == 'ollama' else 'Cloud answer')
+    monkeypatch.setattr(router, 'stream_complete', stream)
+    async def on_delta(text):
+        pass
+    result = asyncio.run(router.respond([], 'hello', on_delta=on_delta))
+    assert result.compute == 'openai'
+    assert seen == [('ollama', on_delta), ('openai', None)]
+
+
+def test_cloud_start_still_streams(providers, monkeypatch):
+    providers()
+    seen = []
+    async def stream(provider, messages, tools=None, tool_choice=None, on_text=None):
+        seen.append((provider.key, on_text))
+        return _reply('Cloud answer')
+    monkeypatch.setattr(router, 'stream_complete', stream)
+    async def on_delta(text):
+        pass
+    asyncio.run(router.respond([], 'escalate this', on_delta=on_delta))
+    assert seen == [('openai', on_delta)]
+
+
+def test_client_tool_calls_go_to_the_client(monkeypatch):
+    monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, tools_enabled=True))
+    monkeypatch.setattr(router, 'openai_tools', lambda: list(SERVER_TOOLS))
+    async def dispatch(name, arguments, ctx):
+        raise AssertionError('client tools must not reach the server registry')
+    monkeypatch.setattr(router, 'dispatch_call', dispatch)
+    call = SimpleNamespace(id='c1', function=SimpleNamespace(name='calendar_list_events', arguments='{}'))
+    seen = []
+    async def complete(provider, messages, tools=None, tool_choice=None):
+        seen.append((list(messages), tools))
+        return _reply(None, [call]) if len(seen) == 1 else _reply('Nothing today.')
+    monkeypatch.setattr(router, '_complete', complete)
+    client_calls = []
+    async def call_client(call_id, name, raw):
+        client_calls.append((call_id, name, raw))
+        return 'No events'
+    ctx = SimpleNamespace(used=[])
+    result = asyncio.run(router.respond([], 'what is on today?', ctx=ctx, client_tools=[CLIENT_TOOL], call_client=call_client))
+    offered_names = [t['function']['name'] for t in seen[0][1]]
+    assert offered_names == ['memory_search', 'calendar_list_events']
+    assert client_calls == [('c1', 'calendar_list_events', '{}')]
+    assert seen[1][0][-1] == {'role': 'tool', 'tool_call_id': 'c1', 'content': 'No events'}
+    assert 'calendar_list_events' in result.tools_used
+
+
+def test_client_tools_are_not_offered_without_a_tool_context(monkeypatch):
+    seen_tools = []
+    async def complete(provider, messages, tools=None):
+        seen_tools.append(tools)
+        return _reply('Hi.')
+    monkeypatch.setattr(router, '_complete', complete)
+    asyncio.run(router.respond([], 'hi', client_tools=[CLIENT_TOOL]))
+    assert seen_tools == [None]
+
+
+def test_context_goes_on_the_latest_user_message(monkeypatch):
+    seen = []
+    async def complete(provider, messages, tools=None):
+        seen.append(messages)
+        return _reply('Ready.')
+    monkeypatch.setattr(router, '_complete', complete)
+    asyncio.run(router.respond([{'role': 'user', 'content': 'Start'}], 'Start', context='Pomodoro idle'))
+    assert 'App context: Pomodoro idle' in seen[0][-1]['content']
+    assert 'Pomodoro idle' not in seen[0][0]['content']
