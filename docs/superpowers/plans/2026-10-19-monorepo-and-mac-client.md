@@ -59,7 +59,11 @@ Phase 2 is complete as of October 20, 2026. `apple/BTKit` has the Pomodoro modul
 
 Verification: 30 package tests pass and the Debug build succeeds. In the running app, a one-minute work phase counted down in the menu bar label, completed, logged 60 seconds to today's total and waited at the short break. With Music closed, the card reported it and Music stayed closed. The notification and Music Automation prompts still need the owner to answer them before those paths can be checked.
 
-Next: Phase 3, Calendar. See [the Apple client README](../../../apple/README.md) for build and test commands.
+Phase 3 is complete as of October 20, 2026, except for owner checks. `apple/BTKit/Sources/BTKit/Calendar` holds the EventKit-backed `CalendarStore`, the `CalendarModule` with four `calendar_*` tool declarations and a next-event snapshot, and day, week and month views with quick create, an edit sheet and "this event" or "all future events" choices for repeating events. Subscribed calendars display as read-only.
+
+Verification: 26 Calendar-branch package tests pass and the Debug build succeeds. The recurring-edit check (a debug-only harness that creates, edits and deletes a "BT recurring test" series) and the hand checks of the views are waiting on the owner to grant calendar access, because the agent session could not answer the permission prompt.
+
+Next: Phase 4, global hotkey. See [the Apple client README](../../../apple/README.md) for build and test commands.
 
 ## Open questions
 
