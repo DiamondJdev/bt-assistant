@@ -1,0 +1,188 @@
+import Foundation
+import Observation
+import os
+import SwiftData
+import SwiftUI
+
+@MainActor
+@Observable
+public final class PomodoroModule: ToolModule {
+    public let id = "pomodoro"
+    public let name = "Pomodoro"
+    public let symbol = "timer"
+    public let tools: [ToolDefinition] = [
+        ToolDefinition(name: "focus_get_status", description: "Current Pomodoro phase, time remaining, and minutes focused today."),
+        ToolDefinition(name: "focus_start", description: "Start or resume the Pomodoro timer."),
+        ToolDefinition(name: "focus_pause", description: "Pause the running Pomodoro phase."),
+        ToolDefinition(name: "focus_stop", description: "Stop the Pomodoro timer and log any work time of at least one minute."),
+        ToolDefinition(name: "focus_get_stats", description: "Minutes focused today and over the past 7 days."),
+    ]
+
+    public private(set) var state: PomodoroState {
+        didSet { save(state, key: Keys.state) }
+    }
+
+    /// Applies to the next phase started; the running phase keeps its `endsAt`.
+    public var durations: PomodoroDurations {
+        didSet { save(durations, key: Keys.durations) }
+    }
+
+    public let nowPlaying: (any NowPlayingSource)?
+
+    @ObservationIgnored private let log: FocusLog
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let notifier: any PhaseNotifier
+    @ObservationIgnored private let now: @Sendable () -> Date
+    @ObservationIgnored private var notifierTask: Task<Void, Never>?
+
+    private enum Keys {
+        static let state = "pomodoro.state"
+        static let durations = "pomodoro.durations"
+    }
+
+    private static let logger = Logger(subsystem: "BTKit", category: "Pomodoro")
+
+    public init(
+        modelContext: ModelContext,
+        defaults: UserDefaults = .standard,
+        notifier: any PhaseNotifier = SystemPhaseNotifier(),
+        now: @escaping @Sendable () -> Date = Date.init,
+        nowPlaying: (any NowPlayingSource)? = nil
+    ) {
+        log = FocusLog(context: modelContext)
+        self.defaults = defaults
+        self.notifier = notifier
+        self.now = now
+        self.nowPlaying = nowPlaying
+        state = Self.load(PomodoroState.self, key: Keys.state, from: defaults) ?? .idle
+        durations = Self.load(PomodoroDurations.self, key: Keys.durations, from: defaults) ?? PomodoroDurations()
+        tick()
+    }
+
+    // MARK: Controls
+
+    public func start() {
+        if state.isPaused { return resume() }
+        guard !state.isRunning else { return }
+        state = state.started(at: now(), durations: durations)
+        scheduleNotification()
+    }
+
+    public func pause() {
+        guard state.isRunning else { return }
+        state = state.paused(at: now())
+        enqueue { await $0.cancelAll() }
+    }
+
+    public func resume() {
+        guard state.isPaused else { return }
+        state = state.resumed(at: now())
+        scheduleNotification()
+    }
+
+    public func skip() {
+        finish(state.skipped(at: now(), durations: durations))
+        enqueue { await $0.cancelAll() }
+    }
+
+    public func stop() {
+        finish(state.stopped(at: now()))
+        enqueue { await $0.cancelAll() }
+    }
+
+    /// Completes the running phase once its end has passed. Its notification already fired.
+    public func tick() {
+        guard let endsAt = state.endsAt, now() >= endsAt else { return }
+        finish(state.completed(durations: durations))
+    }
+
+    // MARK: Reading
+
+    public var todayFocused: TimeInterval {
+        log.totalFocused(on: now())
+    }
+
+    public func remaining() -> TimeInterval? {
+        state.remaining(at: now())
+    }
+
+    /// `18:42` while a phase is running or paused, `nil` when idle.
+    public var menuBarTitle: String? {
+        guard let remaining = remaining() else { return nil }
+        let seconds = Int(remaining.rounded(.up))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    public var snapshot: String? {
+        let today = "\(Self.format(todayFocused)) focused today."
+        guard let remaining = remaining() else { return "Focus: idle, \(today)" }
+        let paused = state.isPaused ? " paused" : ""
+        let left = Self.format(remaining, roundingUp: true)
+        return "Focus: \(Self.describe(state.phase))\(paused), \(left) left, \(today)"
+    }
+
+    public var content: AnyView {
+        AnyView(Text("Pomodoro"))
+    }
+
+    /// Waits for queued notification work; used by tests.
+    func notificationsSettled() async {
+        await notifierTask?.value
+    }
+
+    static func describe(_ phase: PomodoroPhase) -> String {
+        switch phase {
+        case .work: "work phase"
+        case .shortBreak: "short break"
+        case .longBreak: "long break"
+        }
+    }
+
+    /// `1h 35m`, or `35m` under an hour.
+    static func format(_ interval: TimeInterval, roundingUp: Bool = false) -> String {
+        let minutes = Int((interval / 60).rounded(roundingUp ? .up : .down))
+        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+    }
+
+    // MARK: Private
+
+    private func finish(_ result: (PomodoroState, FocusInterval?)) {
+        if let interval = result.1 {
+            do {
+                try log.record(interval, label: nil)
+            } catch {
+                Self.logger.error("Could not log focus session: \(error.localizedDescription)")
+            }
+        }
+        state = result.0
+    }
+
+    private func scheduleNotification() {
+        guard let endsAt = state.endsAt else { return }
+        let phase = state.phase
+        enqueue { await $0.schedule(phase: phase, at: endsAt) }
+    }
+
+    /// Runs notifier calls one after another so a quick pause/resume can't reorder them.
+    private func enqueue(_ work: @escaping @Sendable (any PhaseNotifier) async -> Void) {
+        let previous = notifierTask
+        let notifier = notifier
+        notifierTask = Task {
+            await previous?.value
+            await work(notifier)
+        }
+    }
+
+    private func save(_ value: some Encodable, key: String) {
+        do {
+            defaults.set(try JSONEncoder().encode(value), forKey: key)
+        } catch {
+            Self.logger.error("Could not save \(key): \(error.localizedDescription)")
+        }
+    }
+
+    private static func load<T: Decodable>(_ type: T.Type, key: String, from defaults: UserDefaults) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+}
