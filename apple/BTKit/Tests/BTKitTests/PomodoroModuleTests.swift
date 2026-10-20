@@ -138,6 +138,50 @@ struct PomodoroModuleTests {
         ])
     }
 
+    @Test func controlsNeedApprovalAndReadsDoNot() {
+        let approval = Dictionary(uniqueKeysWithValues: makeModule().tools.map { ($0.name, $0.needsApproval) })
+        #expect(approval == [
+            "focus_get_status": false, "focus_start": true, "focus_pause": true, "focus_stop": true, "focus_get_stats": false,
+        ])
+    }
+
+    @Test func controlToolsActAndReturnTheSnapshot() async throws {
+        let module = makeModule()
+        let none = Data("{}".utf8)
+
+        #expect(try await module.call("focus_start", arguments: none) == "Focus: work phase, 25m left, 0m focused today.")
+        #expect(module.state.isRunning)
+        clock.now += 600
+        #expect(try await module.call("focus_pause", arguments: none) == "Focus: work phase paused, 15m left, 0m focused today.")
+        #expect(module.state.isPaused)
+        #expect(try await module.call("focus_get_status", arguments: none) == module.snapshot)
+        #expect(try await module.call("focus_stop", arguments: none) == "Focus: idle, 10m focused today.")
+        #expect(module.state == .idle)
+        await #expect(throws: ToolError.unknownTool("focus_nope")) {
+            _ = try await module.call("focus_nope", arguments: none)
+        }
+    }
+
+    @Test func statsListTodayTheWeekAndEachDayOldestFirst() async throws {
+        // The test clock is Friday 12 January 2001, early afternoon UTC.
+        let module = makeModule()
+        let log = FocusLog(context: container.mainContext)
+        try log.record(FocusInterval(start: clock.now - 6000, end: clock.now - 300), label: nil)
+        try log.record(FocusInterval(start: clock.now - 2 * 86400 - 1800, end: clock.now - 2 * 86400), label: nil)
+        try log.record(FocusInterval(start: clock.now - 9 * 86400 - 1800, end: clock.now - 9 * 86400), label: nil)
+
+        #expect(try await module.call("focus_get_stats", arguments: Data("{}".utf8)) == """
+            Focused 1h 35m today and 2h 5m over the past 7 days.
+            Sat 6 Jan: 0m
+            Sun 7 Jan: 0m
+            Mon 8 Jan: 0m
+            Tue 9 Jan: 0m
+            Wed 10 Jan: 30m
+            Thu 11 Jan: 0m
+            Fri 12 Jan: 1h 35m
+            """)
+    }
+
     @Test func nowPlayingStatusMessages() {
         let track = NowPlayingTrack(title: "Song", artist: "Artist", artwork: nil, isPlaying: true)
 
