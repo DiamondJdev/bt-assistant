@@ -37,19 +37,44 @@ func timelineLayout(_ events: [CalendarEventItem]) -> [String: (column: Int, col
 
 /// One day's 24-hour timeline: hour lines, timed events and the now line.
 struct TimelineColumn: View {
+    let module: CalendarModule
     let day: Date
     let events: [CalendarEventItem]
+
+    /// Where an empty-slot click asked for quick create.
+    private struct Slot: Identifiable {
+        let start: Date
+        let y: CGFloat
+        var id: Date { start }
+    }
+
+    @State private var slot: Slot?
 
     var body: some View {
         let calendar = Calendar.current
         let layout = timelineLayout(events)
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(SpatialTapGesture().onEnded { tap in
+                        let minutes = Int(tap.location.y / hourHeight * 60)
+                        let start = slotStart(minutes: minutes, day: day, calendar: calendar)
+                        let y = minutesIntoDay(start, day: day, calendar: calendar) / 60 * hourHeight
+                        slot = Slot(start: start, y: y)
+                    })
+                    .popover(
+                        item: $slot,
+                        attachmentAnchor: .rect(.rect(CGRect(x: 0, y: slot?.y ?? 0, width: geometry.size.width, height: 1)))
+                    ) { slot in
+                        QuickCreateView(module: module, start: slot.start) { self.slot = nil }
+                    }
                 ForEach(0..<24, id: \.self) { hour in
                     Rectangle()
                         .fill(Color.secondary.opacity(0.2))
                         .frame(height: 1)
                         .offset(y: CGFloat(hour) * hourHeight)
+                        .allowsHitTesting(false)
                 }
                 ForEach(events) { event in
                     let top = minutesIntoDay(event.start, day: day, calendar: calendar) / 60 * hourHeight
@@ -58,6 +83,7 @@ struct TimelineColumn: View {
                     let width = geometry.size.width / CGFloat(slot.columns)
                     EventBlock(event: event)
                         .frame(width: max(width - 2, 0), height: max(bottom - top, 18))
+                        .eventDetailsOnTap(event, module: module)
                         .offset(x: CGFloat(slot.column) * width, y: top)
                 }
                 if calendar.isDateInToday(day) {
@@ -67,6 +93,7 @@ struct TimelineColumn: View {
                             .frame(height: 2)
                             .offset(y: minutesIntoDay(context.date, day: day, calendar: calendar) / 60 * hourHeight)
                     }
+                    .allowsHitTesting(false)
                 }
             }
         }

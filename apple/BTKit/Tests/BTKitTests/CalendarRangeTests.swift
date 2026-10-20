@@ -60,6 +60,17 @@ struct CalendarRangeTests {
         #expect(minutesIntoDay(date(2026, 11, 2, 1), day: day, calendar: calendar) == 24 * 60)
     }
 
+    @Test func newEventStartsOnQuarterHours() {
+        let calendar = testCalendar()
+        let now = date(2026, 10, 21, 13, 7)
+        #expect(defaultNewEventStart(on: now, now: now, calendar: calendar) == date(2026, 10, 21, 13, 15))
+        #expect(defaultNewEventStart(on: date(2026, 10, 21, 13, 15), now: date(2026, 10, 21, 13, 15), calendar: calendar)
+            == date(2026, 10, 21, 13, 30))
+        #expect(defaultNewEventStart(on: date(2026, 10, 23), now: now, calendar: calendar) == date(2026, 10, 23, 9))
+        // A click 14h 40m down the timeline rounds down to 14:30.
+        #expect(slotStart(minutes: 14 * 60 + 40, day: date(2026, 10, 21), calendar: calendar) == date(2026, 10, 21, 14, 30))
+    }
+
     @Test func overlappingEventsShareColumns() {
         func event(_ id: String, _ startHour: Int, _ endHour: Int) -> CalendarEventItem {
             CalendarEventItem(

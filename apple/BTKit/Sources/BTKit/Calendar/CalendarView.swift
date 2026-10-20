@@ -6,6 +6,7 @@ import AppKit
 struct CalendarView: View {
     @Bindable var module: CalendarModule
     @Environment(\.openURL) private var openURL
+    @State private var showQuickCreate = false
 
     var body: some View {
         Group {
@@ -69,10 +70,20 @@ struct CalendarView: View {
                 Button("Previous", systemImage: "chevron.left") { step(forward: false) }
                 Button("Today") { module.focusDate = module.now() }
                 Button("Next", systemImage: "chevron.right") { step(forward: true) }
+                Button("New Event", systemImage: "plus") { showQuickCreate = true }
+                    .popover(isPresented: $showQuickCreate) {
+                        QuickCreateView(
+                            module: module,
+                            start: defaultNewEventStart(on: module.focusDate, now: module.now(), calendar: .current)
+                        ) { showQuickCreate = false }
+                    }
                 #if DEBUG
                 Button("Recurring Check", systemImage: "ladybug") { module.store.runRecurringEditCheck() }
                 #endif
             }
+        }
+        .sheet(item: $module.editorRequest) { request in
+            EventEditor(module: module, request: request)
         }
         #if DEBUG
         .task {

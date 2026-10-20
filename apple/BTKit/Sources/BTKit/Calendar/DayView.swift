@@ -16,7 +16,7 @@ struct DayView: View {
             }
             if !split.allDay.isEmpty {
                 ScrollView(.horizontal) {
-                    HStack { ForEach(split.allDay) { EventChip(event: $0).frame(width: 160) } }
+                    HStack { ForEach(split.allDay) { EventChip(event: $0).frame(width: 160).eventDetailsOnTap($0, module: module) } }
                         .padding(.horizontal)
                         .padding(.vertical, 6)
                 }
@@ -26,7 +26,7 @@ struct DayView: View {
                 ScrollView {
                     HStack(alignment: .top, spacing: 6) {
                         HourLabels()
-                        TimelineColumn(day: day, events: split.timed)
+                        TimelineColumn(module: module, day: day, events: split.timed)
                     }
                     .padding()
                 }

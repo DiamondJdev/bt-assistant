@@ -17,7 +17,7 @@ struct WeekView: View {
                         Text(days[index].formatted(.dateTime.weekday(.abbreviated).day()))
                             .font(.caption.weight(isToday ? .bold : .regular))
                             .foregroundStyle(isToday ? Color.accentColor : .primary)
-                        ForEach(splits[index].allDay) { EventChip(event: $0) }
+                        ForEach(splits[index].allDay) { EventChip(event: $0).eventDetailsOnTap($0, module: module) }
                     }
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
@@ -35,7 +35,7 @@ struct WeekView: View {
                     HStack(alignment: .top, spacing: 2) {
                         HourLabels()
                         ForEach(days.indices, id: \.self) { index in
-                            TimelineColumn(day: days[index], events: splits[index].timed)
+                            TimelineColumn(module: module, day: days[index], events: splits[index].timed)
                                 .background(calendar.isDateInToday(days[index]) ? Color.accentColor.opacity(0.06) : .clear)
                         }
                     }

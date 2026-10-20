@@ -29,6 +29,7 @@ public final class CalendarModule: ToolModule {
     @ObservationIgnored let now: @Sendable () -> Date
     var mode: CalendarViewMode = .day
     var focusDate: Date
+    var editorRequest: EditorRequest?
 
     public init(store: CalendarStore = CalendarStore(), now: @escaping @Sendable () -> Date = Date.init) {
         self.store = store

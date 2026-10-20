@@ -43,6 +43,21 @@ func minutesIntoDay(_ date: Date, day: Date, calendar: Calendar) -> Double {
     return Double(parts.hour! * 60 + parts.minute!)
 }
 
+/// Start for a new event: the next quarter hour when `day` is today, otherwise 9 AM on `day`.
+func defaultNewEventStart(on day: Date, now: Date, calendar: Calendar) -> Date {
+    guard calendar.isDate(day, inSameDayAs: now) else {
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day)!
+    }
+    let parts = calendar.dateComponents([.hour, .minute], from: now)
+    return slotStart(minutes: parts.hour! * 60 + parts.minute! + 15, day: day, calendar: calendar)
+}
+
+/// The quarter hour at or before `minutes` past local midnight on `day`.
+func slotStart(minutes: Int, day: Date, calendar: Calendar) -> Date {
+    let quarter = min(max(minutes, 0), 24 * 60 - 15) / 15 * 15
+    return calendar.date(bySettingHour: quarter / 60, minute: quarter % 60, second: 0, of: day)!
+}
+
 private func days(in interval: DateInterval, calendar: Calendar) -> [Date] {
     var result: [Date] = []
     var day = interval.start

@@ -47,7 +47,7 @@ struct MonthView: View {
                     .padding(3)
                     .background(isToday ? Color.accentColor : .clear, in: Circle())
             }
-            ForEach(dayEvents.prefix(maxTitles)) { EventChip(event: $0) }
+            ForEach(dayEvents.prefix(maxTitles)) { EventChip(event: $0).eventDetailsOnTap($0, module: module) }
             if dayEvents.count > maxTitles {
                 Text("+\(dayEvents.count - maxTitles) more").font(.caption2).foregroundStyle(.secondary)
             }
