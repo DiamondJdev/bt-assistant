@@ -45,10 +45,9 @@ struct PomodoroMenuBarLabel: View {
 
     private func toggle() {
         let mainWindowVisible = NSApp.windows.contains { $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized }
-        switch HotkeyAction.resolve(appIsActive: NSApp.isActive, mainWindowVisible: mainWindowVisible) {
-        case .hide:
+        if NSApp.isActive && mainWindowVisible {
             NSApp.hide(nil)
-        case .showCalendar:
+        } else {
             sidebar.selectedModuleID = "calendar"
             openWindow(id: "main")
             NSApp.activate()

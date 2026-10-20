@@ -6,7 +6,6 @@ import Observation
 @MainActor
 @Observable
 public final class ChatModel {
-    static let declinedToolResult = "This app does not run tools yet."
     static let lostConnection = "Lost connection to BT. Try again."
     static let sendFailed = "Couldn't reach BT. Check the server address and try again."
 
@@ -95,7 +94,6 @@ public final class ChatModel {
         let socket = makeSocket(endpoints.socketURL(sessionID: selectedSessionID))
         self.socket = socket
         Task { await receiveLoop(socket) }
-        try await socket.send(.hello(tools: []))
         return socket
     }
 
@@ -124,8 +122,6 @@ public final class ChatModel {
             if selectedSessionID == nil { selectedSessionID = id }
         case .delta(let text):
             if isSending { streamingText? += text }
-        case .toolCall(let id, _):
-            try? await socket.send(.toolResult(id: id, ok: false, content: Self.declinedToolResult))
         case .done(let text, let compute, _):
             turns.append(ChatTurn(id: UUID().uuidString, ts: Date().timeIntervalSince1970, role: "bt", text: text, compute: compute))
             streamingText = nil

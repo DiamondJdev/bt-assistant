@@ -13,14 +13,12 @@ enum ChatJSON {
 public enum ServerFrame: Decodable, Equatable, Sendable {
     case session(id: String)
     case delta(String)
-    /// `args` is skipped until the Mac runs tools.
-    case toolCall(id: String, name: String)
     case done(text: String, compute: String, toolsUsed: [String])
     case error(String)
     case unknown
 
     private enum CodingKeys: String, CodingKey {
-        case type, sessionId, text, id, name, compute, toolsUsed, message
+        case type, sessionId, text, compute, toolsUsed, message
     }
 
     public init(from decoder: any Decoder) throws {
@@ -30,8 +28,6 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
             self = .session(id: try c.decode(String.self, forKey: .sessionId))
         case "delta":
             self = .delta(try c.decode(String.self, forKey: .text))
-        case "tool_call":
-            self = .toolCall(id: try c.decode(String.self, forKey: .id), name: try c.decode(String.self, forKey: .name))
         case "done":
             self = .done(
                 text: try c.decode(String.self, forKey: .text),
@@ -46,53 +42,20 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
     }
 }
 
-/// A tool the client offers. Parameters are an empty object schema until phase 6.
-public struct ClientToolSpec: Encodable, Equatable, Sendable {
-    public let name: String
-    public let description: String
-
-    public init(name: String, description: String) {
-        self.name = name
-        self.description = description
-    }
-
-    private enum CodingKeys: String, CodingKey { case name, description, parameters }
-    private struct EmptySchema: Encodable {
-        let type = "object"
-        let properties: [String: String] = [:]
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(name, forKey: .name)
-        try c.encode(description, forKey: .description)
-        try c.encode(EmptySchema(), forKey: .parameters)
-    }
-}
-
-/// A frame to the server.
+/// A frame to the server. `hello` and `tool_result` arrive with phase 6 tools; the server
+/// never sends `tool_call` to a client that offered none.
 public enum ClientFrame: Encodable, Equatable, Sendable {
-    case hello(tools: [ClientToolSpec])
     case message(text: String, context: String?)
-    case toolResult(id: String, ok: Bool, content: String)
 
-    private enum CodingKeys: String, CodingKey { case type, tools, text, context, id, ok, content }
+    private enum CodingKeys: String, CodingKey { case type, text, context }
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .hello(let tools):
-            try c.encode("hello", forKey: .type)
-            try c.encode(tools, forKey: .tools)
         case .message(let text, let context):
             try c.encode("message", forKey: .type)
             try c.encode(text, forKey: .text)
             try c.encodeIfPresent(context, forKey: .context)
-        case .toolResult(let id, let ok, let content):
-            try c.encode("tool_result", forKey: .type)
-            try c.encode(id, forKey: .id)
-            try c.encode(ok, forKey: .ok)
-            try c.encode(content, forKey: .content)
         }
     }
 }
@@ -101,12 +64,6 @@ public struct ChatSessionSummary: Decodable, Identifiable, Equatable, Sendable {
     public let id: String
     public let label: String
     public let updatedAt: Double
-
-    public init(id: String, label: String, updatedAt: Double) {
-        self.id = id
-        self.label = label
-        self.updatedAt = updatedAt
-    }
 }
 
 public struct ChatTurn: Decodable, Identifiable, Equatable, Sendable {
@@ -116,14 +73,6 @@ public struct ChatTurn: Decodable, Identifiable, Equatable, Sendable {
     public let role: String
     public let text: String
     public let compute: String?
-
-    public init(id: String, ts: Double, role: String, text: String, compute: String?) {
-        self.id = id
-        self.ts = ts
-        self.role = role
-        self.text = text
-        self.compute = compute
-    }
 }
 
 /// URLs for one server address, such as `https://bt.example.ts.net`.

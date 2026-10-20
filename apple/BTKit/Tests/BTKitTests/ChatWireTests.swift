@@ -15,8 +15,7 @@ struct ChatWireTests {
     @Test func decodesEveryServerFrame() throws {
         #expect(try frame(#"{"type":"session","session_id":"s1"}"#) == .session(id: "s1"))
         #expect(try frame(#"{"type":"delta","text":"Hel"}"#) == .delta("Hel"))
-        #expect(try frame(#"{"type":"tool_call","id":"c1","name":"calendar_list_events","args":{"day":"today"}}"#)
-            == .toolCall(id: "c1", name: "calendar_list_events"))
+        #expect(try frame(#"{"type":"tool_call","id":"c1","name":"calendar_list_events","args":{}}"#) == .unknown)
         #expect(try frame(#"{"type":"done","text":"Hello","compute":"ollama","tools_used":["memory_search"]}"#)
             == .done(text: "Hello", compute: "ollama", toolsUsed: ["memory_search"]))
         #expect(try frame(#"{"type":"error","message":"Wait for the current reply."}"#)
@@ -25,21 +24,9 @@ struct ChatWireTests {
     }
 
     @Test func encodesClientFramesInTheServerShape() throws {
-        let hello = try object(.hello(tools: [ClientToolSpec(name: "pomodoro_start", description: "Start focus")]))
-        #expect(hello == [
-            "type": "hello",
-            "tools": [[
-                "name": "pomodoro_start",
-                "description": "Start focus",
-                "parameters": ["type": "object", "properties": [String: Any]()],
-            ]],
-        ] as NSDictionary)
-
         #expect(try object(.message(text: "Hi", context: nil)) == ["type": "message", "text": "Hi"] as NSDictionary)
         #expect(try object(.message(text: "Hi", context: "Pomodoro idle"))
             == ["type": "message", "text": "Hi", "context": "Pomodoro idle"] as NSDictionary)
-        #expect(try object(.toolResult(id: "c1", ok: false, content: "No"))
-            == ["type": "tool_result", "id": "c1", "ok": false, "content": "No"] as NSDictionary)
     }
 
     @Test func endpointsHandleTrailingSlashesAndSchemes() throws {
@@ -74,8 +61,6 @@ struct ChatWireTests {
     @Test func serverErrorsCarryTheDetail() {
         #expect(ChatServerError(status: 404, body: Data(#"{"detail":"Conversation not found"}"#.utf8)).message
             == "Conversation not found")
-        #expect(ChatServerError(status: 502, body: Data(#"{"detail":{"message":"Response failed. Try again."}}"#.utf8)).message
-            == "Response failed. Try again.")
         #expect(ChatServerError(status: 500, body: Data("oops".utf8)).message == "BT server error (500).")
     }
 }

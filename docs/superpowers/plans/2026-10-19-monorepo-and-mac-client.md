@@ -72,7 +72,7 @@ Verification: 51 package tests pass across both modules and the Debug build succ
 
 Phases 4 and 5 are complete as of October 20, 2026, from [the hotkey and chat design](../specs/2026-10-20-hotkey-and-chat-design.md) and [its plan](2026-10-20-hotkey-and-chat.md). ⌃⌥Space hides BT when its window is showing and otherwise brings it forward on Calendar. The server streams text chat over `/chat/ws` with client-supplied tools, a 30-second client tool timeout and a nullable `context` column on turns. The BT pane lists every conversation, including ones from the browser client, streams replies and takes its server address from Settings. The Mac sends no tools and no context yet; phase 6 adds both. There is no offline cache.
 
-Verification: 118 Python tests and 68 package tests pass, and the Debug build succeeds. The hotkey and a chat session against a live server still need a hand check by the owner.
+Verification: 118 Python tests and 66 package tests pass, and the Debug build succeeds. The hotkey and a chat session against a live server still need a hand check by the owner.
 
 Next: Phase 6, context layer. See [the Apple client README](../../../apple/README.md) for build and test commands.
 

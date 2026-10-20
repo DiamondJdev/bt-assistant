@@ -57,10 +57,10 @@ struct ChatModelTests {
         #expect(factory.urls == [URL(string: "wss://bt.example.ts.net/chat/ws?session_id=s1")!])
     }
 
-    @Test func firstSendSaysHelloWithNoTools() async {
+    @Test func firstSendSendsTheMessage() async {
         let model = makeModel()
         let socket = await sendHi(model)
-        #expect(socket.sent == [.hello(tools: []), .message(text: "Hi", context: nil)])
+        #expect(socket.sent == [.message(text: "Hi", context: nil)])
         #expect(model.draft.isEmpty)
     }
 
@@ -98,7 +98,7 @@ struct ChatModelTests {
         model.draft = "Still there?"
         await model.send()
         #expect(factory.made.count == 2)
-        #expect(factory.made[1].sent == [.hello(tools: []), .message(text: "Still there?", context: nil)])
+        #expect(factory.made[1].sent == [.message(text: "Still there?", context: nil)])
     }
 
     @Test func failedWriteRestoresTheDraft() async {
@@ -111,15 +111,6 @@ struct ChatModelTests {
         #expect(model.turns.isEmpty)
         #expect(!model.isSending)
         #expect(model.errorMessage != nil)
-    }
-
-    @Test func toolCallsAreDeclined() async throws {
-        let model = makeModel()
-        let socket = await sendHi(model)
-        socket.push(.toolCall(id: "c1", name: "calendar_list_events"))
-        try await waitUntil {
-            socket.sent.last == .toolResult(id: "c1", ok: false, content: "This app does not run tools yet.")
-        }
     }
 
     @Test func blankDraftSendsNothing() async {

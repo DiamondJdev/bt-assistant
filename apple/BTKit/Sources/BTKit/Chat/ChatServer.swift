@@ -7,12 +7,9 @@ public struct ChatServerError: LocalizedError, Equatable {
 
     public init(status: Int, body: Data) {
         self.status = status
-        // FastAPI sends {"detail": "..."} or {"detail": {"message": "..."}}.
+        // /sessions and /history send FastAPI's {"detail": "..."}.
         let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
-        let detail = json?["detail"]
-        message = (detail as? String)
-            ?? ((detail as? [String: Any])?["message"] as? String)
-            ?? "BT server error (\(status))."
+        message = json?["detail"] as? String ?? "BT server error (\(status))."
     }
 
     public var errorDescription: String? { message }
