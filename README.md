@@ -2,7 +2,7 @@
 
 BT is a local-first, voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It runs a conversational core locally through Ollama, keeps transcripts in SQLite, and can escalate a turn to OpenAI when asked or when the local response fails.
 
-This repository is a monorepo. `server/` holds the FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. A native macOS app (`apple/`) and editor plugins (`editors/`) are planned; see [the monorepo plan](docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md). See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
+This repository is a monorepo. `server/` holds the FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. `apple/` holds the native macOS app shell and shared Swift package. Editor plugins (`editors/`) are planned; see [the monorepo plan](docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md). See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
 
 ## Architecture
 
@@ -37,7 +37,8 @@ The text conversational core is ready for development use. The voice pipeline is
 - [x] Browser client with typed chat, push-to-talk, saved sessions and reconnect
 - [x] Open HTTP and WebSocket access inside the tailnet, with a same-origin check
 - [x] NixOS service module and daily transcript backups
-- [ ] Native macOS app (planned in `apple/`)
+- [x] Native macOS app shell and tool sidebar (`apple/`)
+- [ ] Native chat, productivity tools and voice
 - [ ] External integrations
 
 OpenAI fallback has not yet been fully tested end-to-end.
@@ -145,6 +146,12 @@ For the NixOS service, private Tailscale HTTPS, backup/restore steps and deploym
 
 `GET /health` reports process availability. Authenticated `GET /ready` checks storage, Ollama reachability and the installed model. Run one server process; conversation leases are process-local.
 
+## Native macOS client
+
+Open `apple/BT.xcodeproj`, select the `BTMac` scheme and run it. The app requires macOS 14 or later and Xcode with Swift 6 support. It currently shows the tool sidebar and a BT placeholder; it does not connect to the server yet.
+
+See [apple/README.md](apple/README.md) for terminal build commands, package tests and the module contract.
+
 ## Configuration
 
 Copy [server/.env.example](server/.env.example) to `server/.env`; all options have sensible defaults unless noted otherwise.
@@ -170,6 +177,8 @@ BT normally uses Ollama. It escalates to the configured OpenAI model when you ex
 ## Project layout
 
 - `server/` — Python backend (`pyproject.toml`, `uv.lock`, `tests/`, `nix/`)
+- `apple/BTKit/` — shared Swift package with the module contract and tool sidebar
+- `apple/BTMac/` — macOS app entry point and sandbox entitlements
 - `server/bt/client/` — browser chat, push-to-talk and saved conversations
 - `server/bt/gateway/` — HTTP gateway, same-origin check and health endpoints
 - `server/bt/llm/` — local/cloud model routing

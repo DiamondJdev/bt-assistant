@@ -49,6 +49,14 @@ Constraints for tool design:
 8. Today view and events. Proactive event turns with a per-hour cap and quiet hours, start focus from an event, auto-tagging.
 9. Voice in the Mac client over the existing `/voice/ws` wire format, then delete the browser client.
 
+## Progress
+
+Phase 1 is complete as of October 20, 2026. `apple/BT.xcodeproj` runs the thin macOS app; `apple/BTKit` owns the tool sidebar, `ToolModule` contract and BT placeholder. Modules declare tool metadata and an optional snapshot. Argument schemas, execution and context budgeting remain in phases 5 and 6.
+
+Verification: six package tests pass, Debug and universal Release builds succeed, and the running macOS app shows the selected BT pane and preserves selection when the sidebar is hidden and shown. Signing is ad-hoc for local development. No server connection or iOS app has been implemented.
+
+Next: Phase 2, Pomodoro. See [the Apple client README](../../../apple/README.md) for build and test commands.
+
 ## Open questions
 
 - Coding idle threshold: 5 minutes, or longer to count reading time?

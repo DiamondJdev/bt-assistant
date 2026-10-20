@@ -4,7 +4,7 @@ BT is a local-first personal assistant. The Python/FastAPI hub handles Ollama ch
 
 See `README.md` for setup and `docs/DESIGN.md` for design context.
 
-This is a monorepo. The Python backend lives in `server/`; run `uv` and test commands from there. `apple/` (SwiftUI macOS client, shared `BTKit` package) and `editors/` (heartbeat plugins) are planned in `docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md`.
+This is a monorepo. The Python backend lives in `server/`; run `uv` and test commands from there. `apple/BTKit/` holds the shared Swift package and tool sidebar; `apple/BTMac/` is the thin macOS app target in `apple/BT.xcodeproj`. Run package tests with `swift test --package-path apple/BTKit` from the repository root. Native chat and productivity tools, plus `editors/` heartbeat plugins, remain planned in `docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md`.
 
 ## Module overview
 

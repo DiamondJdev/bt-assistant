@@ -1,0 +1,170 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+		B10000000000000000000001 = {
+			isa = PBXBuildFile;
+			fileRef = B10000000000000000000003;
+		};
+		B10000000000000000000002 = {
+			isa = PBXBuildFile;
+			productRef = B10000000000000000000015;
+		};
+		B10000000000000000000003 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = BTMacApp.swift;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000004 = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = BT.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		B10000000000000000000005 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (B10000000000000000000002);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000000000000000000006 = {
+			isa = PBXGroup;
+			children = (B10000000000000000000007, B10000000000000000000008);
+			sourceTree = "<group>";
+		};
+		B10000000000000000000007 = {
+			isa = PBXGroup;
+			children = (B10000000000000000000003, B10000000000000000000016);
+			path = BTMac;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000008 = {
+			isa = PBXGroup;
+			children = (B10000000000000000000004);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000009 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000010;
+			buildPhases = (B1000000000000000000000B, B10000000000000000000005);
+			buildRules = ();
+			dependencies = ();
+			name = BTMac;
+			packageProductDependencies = (B10000000000000000000015);
+			productName = BT;
+			productReference = B10000000000000000000004;
+			productType = "com.apple.product-type.application";
+		};
+		B1000000000000000000000A = {
+			isa = PBXProject;
+			attributes = { LastUpgradeCheck = 1600; };
+			buildConfigurationList = B1000000000000000000000F;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = B10000000000000000000006;
+			packageReferences = (B10000000000000000000014);
+			productRefGroup = B10000000000000000000008;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (B10000000000000000000009);
+		};
+		B1000000000000000000000B = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (B10000000000000000000001);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1000000000000000000000C = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B1000000000000000000000D = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B1000000000000000000000F = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B1000000000000000000000C, B1000000000000000000000D);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000010 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B10000000000000000000011, B10000000000000000000012);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000011 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BTMac/BTMac.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = BT;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
+				PRODUCT_NAME = BT;
+			};
+			name = Debug;
+		};
+		B10000000000000000000012 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BTMac/BTMac.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = BT;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
+				PRODUCT_NAME = BT;
+			};
+			name = Release;
+		};
+		B10000000000000000000014 = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = BTKit;
+		};
+		B10000000000000000000015 = {
+			isa = XCSwiftPackageProductDependency;
+			package = B10000000000000000000014;
+			productName = BTKit;
+		};
+		B10000000000000000000016 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.entitlements;
+			path = BTMac.entitlements;
+			sourceTree = "<group>";
+		};
+	};
+	rootObject = B1000000000000000000000A;
+}
