@@ -18,7 +18,7 @@ import openai
 from openai import AsyncOpenAI
 
 from bt.config import CONFIG
-from bt.llm.streaming import MAX_TOKENS, completion_kwargs, stream_complete  # noqa: F401 (MAX_TOKENS re-exported)
+from bt.llm.streaming import completion_kwargs, stream_complete
 from bt.personality.system_prompt import recent_user_text, render_system_prompt, turn_note, with_turn_note
 from bt.tools.registry import ToolContext, dispatch_call, openai_tools
 
@@ -140,8 +140,7 @@ async def respond(
 	client_names: set[str] = set()
 	if ctx is not None and CONFIG.tools_enabled:
 		tools = openai_tools() + list(client_tools or ())
-		if call_client:
-			client_names = {t["function"]["name"] for t in client_tools or ()}
+		client_names = {t["function"]["name"] for t in client_tools or ()}
 
 	async def complete(tool_choice: str | None = None):
 		if on_delta is None:

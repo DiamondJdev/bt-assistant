@@ -100,15 +100,11 @@ class _Connection:
 		self.ws = ws
 		self.session_id = session_id
 		self.client_tools: list[dict[str, Any]] | None = None
-		self.started = False
 		self.turn: asyncio.Task | None = None
 		self.pending: dict[str, asyncio.Future[ToolResult]] = {}
 
-	async def send(self, frame: dict[str, Any]) -> None:
-		await self.ws.send_json(frame)
-
 	async def error(self, message: str) -> None:
-		await self.send({"type": "error", "message": message})
+		await self.ws.send_json({"type": "error", "message": message})
 
 	async def on_frame(self, raw: str | None) -> None:
 		try:
@@ -128,7 +124,6 @@ class _Connection:
 			if self.turn and not self.turn.done():
 				await self.error("Wait for the current reply.")
 				return
-			self.started = True
 			self.turn = asyncio.create_task(self.run_turn(frame))
 		else:
 			# Results for unknown or expired calls are dropped.
@@ -139,10 +134,10 @@ class _Connection:
 	async def on_hello(self, hello: Hello) -> None:
 		if not CONFIG.tools_enabled:
 			return
-		problem = "send hello before the first message." if self.started else _tools_problem(hello.tools)
+		problem = "send hello before the first message." if self.turn else _tools_problem(hello.tools)
 		if problem:
 			await self.error(f"Tools were rejected: {problem}")
-			if not self.started:
+			if not self.turn:
 				self.client_tools = None
 			return
 		self.client_tools = [{"type": "function", "function": t.model_dump()} for t in hello.tools] or None
@@ -171,7 +166,7 @@ class _Connection:
 		ctx = default_context(sid, "text") if CONFIG.tools_enabled else None
 
 		async def delta(text: str) -> None:
-			await self.send({"type": "delta", "text": text})
+			await self.ws.send_json({"type": "delta", "text": text})
 
 		result = await respond(
 			history,
@@ -186,7 +181,7 @@ class _Connection:
 		if not result:
 			raise ValueError("LLM did not return a response")
 		await asyncio.to_thread(store.add_turn, sid, "bt", result.text, compute=result.compute)
-		await self.send({
+		await self.ws.send_json({
 			"type": "done",
 			"text": result.text,
 			"compute": result.compute,
@@ -202,7 +197,7 @@ class _Connection:
 		waiter: asyncio.Future[ToolResult] = asyncio.get_running_loop().create_future()
 		self.pending[call_id] = waiter
 		try:
-			await self.send({
+			await self.ws.send_json({
 				"type": "tool_call",
 				"id": call_id,
 				"name": name,
@@ -232,7 +227,7 @@ async def chat_socket(websocket: WebSocket, session_id: str | None = Query(defau
 		return
 
 	conn = _Connection(websocket, session_id)
-	await conn.send({"type": "session", "session_id": session_id})
+	await conn.ws.send_json({"type": "session", "session_id": session_id})
 	try:
 		while True:
 			event = await websocket.receive()
