@@ -13,9 +13,11 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from bt.config import CONFIG
+from bt.gateway.chat_ws import ChatText
+from bt.gateway.chat_ws import router as chat_ws_router
 from bt.gateway.origin import OriginMiddleware
 from bt.llm.router import respond
 from bt.tools.registry import default_context
@@ -45,6 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(OriginMiddleware)
+app.include_router(chat_ws_router)
 if STATIC.exists():
 	app.mount("/static", StaticFiles(directory=STATIC), name="client")
 
@@ -60,15 +63,8 @@ if CONFIG.dev_ui_enabled:
 
 
 class ChatRequest(BaseModel):
-	text: str = Field(min_length=1, max_length=16000)
+	text: ChatText
 	session_id: str | None = Field(default=None, max_length=128)
-
-	@field_validator("text")
-	@classmethod
-	def not_blank(cls, value: str) -> str:
-		if not value.strip():
-			raise ValueError("Enter a message")
-		return value
 
 
 class ChatResponse(BaseModel):
