@@ -49,7 +49,7 @@ class TranscriptObserver(BaseObserver):
 			self._reply.append(frame.text)
 		elif isinstance(frame, LLMFullResponseEndFrame):
 			reply = strip_thinking("".join(self._reply))
-			await self._add_turn("bt", reply, compute=self._compute_labels.get(src))
+			await self._add_turn("bt", reply, compute=getattr(src, "compute", self._compute_labels.get(src)))
 			self._reply.clear()
 
 	async def _add_turn(self, role: str, text: str, **kwargs) -> None:

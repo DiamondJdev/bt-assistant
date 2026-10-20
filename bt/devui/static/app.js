@@ -15,6 +15,7 @@ function serverUrl() {
 
 let ws = null, micCtx = null, micStream = null, playCtx = null, playAt = 0;
 let sessionId = null;
+const playingSources = new Set();
 const metrics = { ttfb: {}, processing: {}, tokens: null, characters: null };
 
 // ---------- turns ----------
@@ -104,6 +105,8 @@ function play(b64, rate) {
 	const src = playCtx.createBufferSource();
 	src.buffer = buf;
 	src.connect(playCtx.destination);
+	playingSources.add(src);
+	src.onended = () => playingSources.delete(src);
 	// Chunks arrive faster than realtime, so queue them end to end instead of
 	// starting each on arrival.
 	playAt = Math.max(playAt, playCtx.currentTime);
@@ -111,7 +114,11 @@ function play(b64, rate) {
 	playAt += buf.duration;
 }
 
-function stopPlayback() { playAt = 0; }
+function stopPlayback() {
+	for (const source of playingSources) source.stop();
+	playingSources.clear();
+	playAt = 0;
+}
 
 // ---------- audio in ----------
 

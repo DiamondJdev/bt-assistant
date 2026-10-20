@@ -11,11 +11,9 @@ from __future__ import annotations
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.pipeline.llm_switcher import LLMSwitcher
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.service_switcher import ServiceSwitcherStrategyFailover
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
+from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frameworks.rtvi import (
 	RTVIFunctionCallReportLevel,
 	RTVIObserverParams,
@@ -24,11 +22,6 @@ from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
 )
-from pipecat.services.llm_service import LLMService
-from pipecat.services.ollama.llm import OLLamaLLMService
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.piper.tts import PiperTTSService
-from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transports.websocket.fastapi import (
 	FastAPIWebsocketParams,
 	FastAPIWebsocketTransport,
@@ -36,11 +29,10 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat.utils.text.skip_tags_aggregator import SkipTagsAggregator
 
 from bt.config import CONFIG
-from bt.personality.system_prompt import render_system_prompt
 from bt.tools.registry import default_context, pipecat_tools
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
-from bt.voice.routing import EscalationRouter
+from bt.voice.routing import RoutedLLMService
 from bt.voice.serializer import JSONFrameSerializer
 
 SAMPLE_RATE = 16_000
@@ -50,35 +42,25 @@ VAD_PARAMS = VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.6, min_volume
 
 NO_SPEECH_PROB = 0.5 # Probability threshold for false positives in STT. Lower is more sensitive
 
-class _FreshPrompt:
-	# Re-renders the prompt before every inference so time and turn never go stale.
-	def __init__(self, session_id: str, **kwargs) -> None:
-		super().__init__(**kwargs)
-		self.session_id = session_id
-
-	async def get_chat_completions(self, context: LLMContext):
-		turns = sum(1 for m in context.get_messages() if m.get("role") == "user")
-		# No public per-turn hook: set pipecat's base and recompose so addons and later recomposes keep it.
-		self._base_system_instruction = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
-		self._compose_system_instruction()
-		return await super().get_chat_completions(context)
-
-
-class FreshOllamaLLMService(_FreshPrompt, OLLamaLLMService):
-	pass
-
-
-class FreshOpenAILLMService(_FreshPrompt, OpenAILLMService):
-	pass
-
-
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
 
-# Constructs the voice pipeline for a single session (VAD->STT->LLM->TTS).
-def build_worker(
-	websocket, session_id: str, history: list[LLMContextMessage] | None = None
-) -> PipelineWorker:
+def create_speech_services():
+	# Model loading runs outside the event loop, before accepting voice traffic.
+	from pipecat.services.whisper.stt import WhisperSTTService
+	from pipecat.services.piper.tts import PiperTTSService
+
+	stt = WhisperSTTService(
+		device=CONFIG.whisper_device,
+		compute_type=CONFIG.whisper_compute_type,
+		settings=WhisperSTTService.Settings(model=CONFIG.whisper_model, no_speech_prob=NO_SPEECH_PROB),
+	)
+	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
+	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")])
+	return stt, tts
+
+
+def build_worker(websocket, session_id: str, history, speech_services, on_disconnect) -> PipelineWorker:
 	transport = FastAPIWebsocketTransport(
 		websocket=websocket,
 		params=FastAPIWebsocketParams(
@@ -91,37 +73,12 @@ def build_worker(
 		),
 	)
 
-	stt = WhisperSTTService(
-		device=CONFIG.whisper_device,
-		compute_type=CONFIG.whisper_compute_type,
-		settings=WhisperSTTService.Settings(
-			model=CONFIG.whisper_model,
-			no_speech_prob=NO_SPEECH_PROB,
-		),
-	)
-	system = render_system_prompt(surface="voice", session_id=session_id)
-	local_llm = FreshOllamaLLMService(
-		session_id,
-		base_url=CONFIG.ollama_url("v1"),
-		settings=OLLamaLLMService.Settings(model=CONFIG.ollama_model, system_instruction=system),
-	)
-	compute_labels: dict[LLMService, str] = {local_llm: "ollama"}
-	cloud_llm = None
-	if CONFIG.openai_api_key:
-		cloud_llm = FreshOpenAILLMService(
-			session_id,
-			api_key=CONFIG.openai_api_key,
-			settings=OpenAILLMService.Settings(
-				model=CONFIG.openai_model,
-				system_instruction=system,
-				max_completion_tokens=1024,
-			),
-		)
-		compute_labels[cloud_llm] = "openai"
-	llm = LLMSwitcher(llms=list(compute_labels), strategy_type=ServiceSwitcherStrategyFailover)
-	router = EscalationRouter(llm, local_llm, cloud_llm)
-	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
-	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")]) # Filter out thinking from TTS responses to clients
+	@transport.event_handler("on_client_disconnected")
+	async def disconnected(*_args):
+		await on_disconnect()
+
+	stt, tts = speech_services
+	llm = RoutedLLMService(session_id)
 	tools = pipecat_tools() if CONFIG.tools_enabled else None
 
 	# Conversation history
@@ -142,7 +99,6 @@ def build_worker(
 		transport.input(),
 		stt,
 		aggregators.user(),
-		router,
 		llm,
 		tts,
 		transport.output(),
@@ -163,5 +119,5 @@ def build_worker(
 		rtvi_observer_params=RTVIObserverParams(
 			function_call_report_level={"*": RTVIFunctionCallReportLevel.FULL},
 		),
-		observers=[TranscriptObserver(get_store(), session_id, compute_labels)],
+		observers=[TranscriptObserver(get_store(), session_id, {llm: "ollama"})],
 	)

@@ -2,7 +2,7 @@
 
 BT is a local-first, voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It runs a conversational core locally through Ollama, keeps transcripts in SQLite, and can escalate a turn to OpenAI when asked or when the local response fails.
 
-This repository contains the phase-one desktop hub: a FastAPI service with text chat, an optional voice pipeline, and a small developer dashboard. Clients and external integrations are deliberately out of scope for now. See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
+This repository contains a FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
 
 ## Architecture
 
@@ -34,7 +34,10 @@ The text conversational core is ready for development use. The voice pipeline is
 - [x] SQLite-backed session transcripts
 - [x] Optional speech-to-text and text-to-speech pipeline
 - [x] Developer dashboard for live transcripts
-- [ ] Cross-platform clients and external integrations
+- [x] Browser client with typed chat, push-to-talk, saved sessions and reconnect
+- [x] Open HTTP and WebSocket access inside the tailnet, with a same-origin check
+- [x] NixOS service module and daily transcript backups
+- [ ] Native apps and external integrations
 
 OpenAI fallback has not yet been fully tested end-to-end.
 
@@ -54,7 +57,7 @@ Voice mode also needs FFmpeg, PortAudio, and Piper. The Nix development shell pr
 Enter the development shell and install the Python dependencies:
 
 ```sh
-nix develop
+nix develop ./nix
 uv sync
 ```
 
@@ -129,30 +132,15 @@ uv run bt-dev
 
 To enable the developer dashboard, set either `BT_DEVELOPER_MODE=1` or `BT_DEVUI=1` in `.env`, then open `/dev` on the active server—for example, `http://127.0.0.1:8081/dev` when using `bt-dev`.
 
-## Remote access over Tailscale
+## Browser client and full-time server
 
-With Tailscale already set up on both machines, set `BT_HOST` on the server:
+Open `/` on the running server. BT has no login: anyone who can reach it on your tailnet can use it, so it only binds to loopback or a Tailscale address. Requests from another website's origin are rejected. Native clients that send no `Origin` header are accepted.
 
-- `BT_HOST=0.0.0.0` listens on every interface. Only open the port on `tailscale0`; on NixOS, use `networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 8080 ];`.
-- `BT_HOST=<tailscale ip>` (from `tailscale ip -4`) listens only on the tailnet, but then `127.0.0.1` no longer reaches BT.
+The client supports typed chat, saved conversations, foreground push-to-talk and automatic reconnect after a network drop. Voice needs `BT_VOICE=1` and HTTPS or localhost for microphone access. One device can use voice at a time. Disconnect voice to type in that conversation.
 
-BT has no authentication, so don't bind it to an interface that isn't trusted.
+For the NixOS service, private Tailscale HTTPS, backup/restore steps and deployment checks, follow [the deployment guide](docs/DEPLOYMENT.md). The service remains bound to loopback behind Tailscale Serve. Developer mode is not needed by the browser client.
 
-Then, from another tailnet device:
-
-```sh
-curl http://<bt-host>:8080/health
-```
-
-### Standalone dashboard
-
-To test remote voice from another device, run the dashboard on that device:
-
-```sh
-uv run bt-devui
-```
-
-Open `http://127.0.0.1:8082/dev?server=http://<bt-host>:8080`, or type the server into the dashboard's header field. Because the page is served from localhost, the browser allows mic access without HTTPS. The server still needs `BT_VOICE=1`. To show model names, it also needs `BT_DEVUI=1`.
+`GET /health` reports process availability. Authenticated `GET /ready` checks storage, Ollama reachability and the installed model. Run one server process; conversation leases are process-local.
 
 ## Configuration
 
@@ -178,9 +166,19 @@ BT normally uses Ollama. It escalates to the configured OpenAI model when you ex
 
 ## Project layout
 
-- `bt/gateway/` — HTTP chat gateway and health endpoint
+- `bt/client/` — browser chat, push-to-talk and saved conversations
+- `bt/gateway/` — HTTP gateway, same-origin check and health endpoints
 - `bt/llm/` — local/cloud model routing
 - `bt/voice/`, `bt/stt/`, and `bt/tts/` — optional voice pipeline
 - `bt/transcript/` — SQLite-backed sessions and turns
 - `bt/personality/SOUL.md` — personality source used to build the system prompt
 - `docs/DESIGN.md` — design decisions and phase-two ideas
+
+## Verification
+
+```sh
+uv run pytest -q
+node --test tests/*.test.mjs
+```
+
+These checks use temporary databases and fake provider responses. They do not invoke paid models. Real voice, NixOS service behavior and iPhone audio still need device validation.

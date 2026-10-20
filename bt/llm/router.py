@@ -38,8 +38,9 @@ LLM_TIMEOUT_SECS = 60
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
 
 
-def strip_thinking(text: str | None) -> str:
-	return _THINK_RE.sub("", text or "").strip()
+def strip_thinking(text: object) -> str:
+	# Anything but a string (None, a malformed list) counts as no reply.
+	return _THINK_RE.sub("", text).strip() if isinstance(text, str) else ""
 
 # WARN: This could falsely trigger on a valid response
 MAX_TOOL_ITERATIONS = 6
@@ -93,7 +94,7 @@ async def _complete(
 
 	resp = await provider.client.chat.completions.create(**kwargs)
 	if not resp.choices:
-		raise RuntimeError(f"{provider.key} returned no choices")
+		raise ValueError(f"{provider.key} returned no choices")
 	return resp.choices[0].message
 
 
@@ -127,6 +128,8 @@ async def respond(
 	ctx: ToolContext | None = None,
 	session_id: str | None = None,
 ) -> LLMResponse | None:
+	if provider not in {None, "local", "cloud"}:
+		raise ValueError("Unknown provider")
 	escalated = provider == "cloud" or wants_escalation(user_text)
 	if escalated:
 		log.info("starting on the cloud model")
@@ -142,8 +145,8 @@ async def respond(
 		for _ in range(MAX_TOOL_ITERATIONS):
 			try:
 				message = await _complete(current, working, tools)
-			except openai.APIError as exc:
-				# Covers connection, timeout and status errors; tool turns so far are kept.
+			except (openai.APIError, ValueError) as exc:
+				# Covers connection, timeout, status errors and malformed replies; tool turns so far are kept.
 				if escalated:
 					raise
 				log.warning("local call failed (%s), escalating to cloud", exc)

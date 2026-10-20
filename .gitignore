@@ -10,5 +10,7 @@ result
 !.env.example
 .DS_Store
 
+/.nix-runtime*
+
 # Memory files: personal facts written by the model, never reviewed before commit
 memory/
