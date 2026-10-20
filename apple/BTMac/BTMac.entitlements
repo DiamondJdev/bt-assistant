@@ -12,5 +12,7 @@
             <string>com.apple.Music.library.read</string>
         </array>
     </dict>
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
 </dict>
 </plist>
