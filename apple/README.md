@@ -1,6 +1,6 @@
 # BT Apple clients
 
-The macOS app has a tool sidebar with BT chat, a Pomodoro timer and Calendar. Pomodoro and Calendar work without a server; chat needs the BT server. Voice belongs to a later phase in the [client plan](../docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md).
+The macOS app has a tool sidebar with BT chat, a Pomodoro timer, Calendar and a coding tracker. Pomodoro, Calendar and Coding work without a server; chat needs the BT server. Voice belongs to a later phase in the [client plan](../docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md).
 
 Press ⌃⌥Space from any app to bring BT up on Calendar. Press it again while BT's window is in front to hide BT. The shortcut is fixed. If another app already owns it, BT logs the failure and runs without it.
 
@@ -34,6 +34,14 @@ The timer runs 25-minute work blocks, 5-minute short breaks and a 15-minute long
 
 The Calendar tool reads and writes your calendars through EventKit, so it shows every calendar Apple Calendar knows about, including school and Google subscriptions. Events on subscribed calendars are read-only. You can grant or revoke access in System Settings under Privacy & Security, Calendars; the Calendar pane links there when access is off.
 
+## Coding
+
+The Coding pane tracks time spent in VS Code on this Mac. Install the heartbeat extension as described in [`editors/vscode/README.md`](../editors/vscode/README.md). It records only the workspace folder name, the language and the time, never file paths or contents.
+
+The extension appends heartbeats to `~/.bt/inbox/`. The app reads that folder at launch and whenever it changes, stores each heartbeat as a `CodingHeartbeat` in SwiftData and deletes the file. The sandbox allows this folder through the `com.apple.security.temporary-exception.files.home-relative-path.read-write` entitlement with `/.bt/inbox/`. A session ends after 15 minutes without a heartbeat or when the project changes, so reading and thinking time between edits counts. A session counts toward the day it started.
+
+The pane shows today's total, the open session, a seven-day chart by project, and totals by project and language for today or the past seven days.
+
 ## Test
 
 From the repository root:
@@ -44,7 +52,7 @@ swift test --package-path apple/BTKit
 
 If the repository is under `~/Documents`, codesigning the test bundle can fail with "resource fork, Finder information, or similar detritus not allowed". Run `xattr -cr apple/BTKit/.build` and try again, or pass `--scratch-path /tmp/btkit-build`.
 
-Tests cover the sidebar, the hotkey decision, the chat wire types and chat model, the Pomodoro state machine, the focus log totals, and the Pomodoro module's persistence, notifications, snapshot and tool declarations. They do not launch the app. `BTKit` targets macOS 14 and iOS 17; there is no iOS app target yet.
+Tests cover the sidebar, the hotkey decision, the chat wire types and chat model, the Pomodoro state machine, the focus log totals, the Pomodoro module's persistence, notifications, snapshot and tool declarations, and the coding tracker's heartbeat parsing, sessions, inbox ingest, tools and snapshot. They do not launch the app. Test the VS Code extension with `node --test editors/vscode`. `BTKit` targets macOS 14 and iOS 17; there is no iOS app target yet.
 
 ## Add a module
 
