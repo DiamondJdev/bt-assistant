@@ -38,7 +38,7 @@
 		};
 		B10000000000000000000007 = {
 			isa = PBXGroup;
-			children = (B10000000000000000000003, B10000000000000000000016);
+			children = (B10000000000000000000003, B10000000000000000000017, B10000000000000000000018, B10000000000000000000016);
 			path = BTMac;
 			sourceTree = "<group>";
 		};
@@ -78,7 +78,7 @@
 		B1000000000000000000000B = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (B10000000000000000000001);
+			files = (B10000000000000000000001, B10000000000000000000019, B1000000000000000000001A);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B1000000000000000000000C = {
@@ -127,6 +127,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = BT;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "BT shows and controls the song playing in Music during focus sessions.";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
 				PRODUCT_NAME = BT;
@@ -144,6 +145,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = BT;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "BT shows and controls the song playing in Music during focus sessions.";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
 				PRODUCT_NAME = BT;
@@ -158,6 +160,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B10000000000000000000014;
 			productName = BTKit;
+		};
+		B10000000000000000000017 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = MusicController.swift;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000018 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = PomodoroMenuBar.swift;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000019 = {
+			isa = PBXBuildFile;
+			fileRef = B10000000000000000000017;
+		};
+		B1000000000000000000001A = {
+			isa = PBXBuildFile;
+			fileRef = B10000000000000000000018;
 		};
 		B10000000000000000000016 = {
 			isa = PBXFileReference;

@@ -1,6 +1,6 @@
 # BT Apple clients
 
-Phase 1 provides a native macOS window with a tool sidebar and a BT placeholder. It works without a server. Chat, Pomodoro, calendar and voice belong to later phases in the [client plan](../docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md).
+The macOS app has a tool sidebar with a BT placeholder and a Pomodoro timer. It works without a server. Chat, calendar and voice belong to later phases in the [client plan](../docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md).
 
 ## Run
 
@@ -14,7 +14,13 @@ xcodebuild -project apple/BT.xcodeproj -scheme BTMac -configuration Debug \
 open /tmp/bt-macos-build/Build/Products/Debug/BT.app
 ```
 
-The app is sandboxed. It requests no calendar, microphone or network access in this phase.
+The app is sandboxed. Pomodoro asks for permission to send notifications the first time a phase starts. It also asks to control Music (Automation) the first time it reads the playing track. The `com.apple.security.scripting-targets` entitlement limits it to Music's playback and library-read access groups. It requests no calendar, microphone or network access yet.
+
+If you denied a prompt, re-enable it under System Settings › Notifications › BT or System Settings › Privacy & Security › Automation › BT.
+
+## Pomodoro
+
+The timer runs 25-minute work blocks, 5-minute short breaks and a 15-minute long break after every fourth block. Durations are set from the toolbar button in the pane. The app stores the time each phase ends, so the timer stays correct across sleep and relaunch. Phases don't advance on their own: a notification fires and the next phase waits for Start. Each completed work block, and any stopped block that ran for at least a minute, is saved as a `FocusSession` in the app's SwiftData store. The pane shows today's total. The menu bar shows the countdown and keeps running after the main window is closed; its menu can start, pause, stop and reopen the window. The now-playing card controls whatever is already playing in Music and never opens Music unless you press Open Music.
 
 ## Test
 
@@ -24,7 +30,9 @@ From the repository root:
 swift test --package-path apple/BTKit
 ```
 
-Tests cover initial selection, switching modules, missing selections and BT's empty tool/context declarations. They do not launch the app. `BTKit` targets macOS 14 and iOS 17; there is no iOS app target yet.
+If the repository is under `~/Documents`, codesigning the test bundle can fail with "resource fork, Finder information, or similar detritus not allowed". Run `xattr -cr apple/BTKit/.build` and try again, or pass `--scratch-path /tmp/btkit-build`.
+
+Tests cover the sidebar, the Pomodoro state machine, the focus log totals, and the Pomodoro module's persistence, notifications, snapshot and tool declarations. They do not launch the app. `BTKit` targets macOS 14 and iOS 17; there is no iOS app target yet.
 
 ## Add a module
 

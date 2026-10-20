@@ -55,7 +55,11 @@ Phase 1 is complete as of October 20, 2026. `apple/BT.xcodeproj` runs the thin m
 
 Verification: six package tests pass, Debug and universal Release builds succeed, and the running macOS app shows the selected BT pane and preserves selection when the sidebar is hidden and shown. Signing is ad-hoc for local development. No server connection or iOS app has been implemented.
 
-Next: Phase 2, Pomodoro. See [the Apple client README](../../../apple/README.md) for build and test commands.
+Phase 2 is complete as of October 20, 2026. `apple/BTKit` has the Pomodoro module: a timer state machine that stores `endsAt`, a SwiftData `FocusSession` log, phase-end notifications, the pane with a now-playing card, five `focus_*` tool declarations and a one-line snapshot. `apple/BTMac` adds the menu bar countdown, the Music controller and the shared `ModelContainer`.
+
+Verification: 30 package tests pass and the Debug build succeeds. In the running app, a one-minute work phase counted down in the menu bar label, completed, logged 60 seconds to today's total and waited at the short break. With Music closed, the card reported it and Music stayed closed. The notification and Music Automation prompts still need the owner to answer them before those paths can be checked.
+
+Next: Phase 3, Calendar. See [the Apple client README](../../../apple/README.md) for build and test commands.
 
 ## Open questions
 
