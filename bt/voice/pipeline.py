@@ -9,6 +9,9 @@ TODO: Process on Client devices?
 
 from __future__ import annotations
 
+import re
+
+from num2words import num2words
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
@@ -27,6 +30,7 @@ from pipecat.transports.websocket.fastapi import (
 	FastAPIWebsocketTransport,
 )
 from pipecat.utils.text.skip_tags_aggregator import SkipTagsAggregator
+from pipecat.utils.text.transforms.voice_formatter import VoiceFormatter
 
 from bt.config import CONFIG
 from bt.tools.registry import default_context, pipecat_tools
@@ -45,6 +49,16 @@ NO_SPEECH_PROB = 0.5 # Probability threshold for false positives in STT. Lower i
 # Primes Whisper with the assistant's name and punctuated style; add names it keeps misspelling
 WHISPER_PROMPT = "Hey BT, what's on my calendar today? Remind me to call Mom at 5 p.m."
 
+# ponytail: any 1500-2099 number is read as a year ("2000 users" too); add context checks if that misfires
+YEAR_RE = re.compile(r"\b(1[5-9]\d\d|20\d\d)\b")
+
+async def speak_years(text: str, _aggregation_type: str) -> str:
+	return YEAR_RE.sub(lambda m: num2words(int(m.group()), to="year"), text)
+
+# Applied in order to text just before Piper speaks it; transcripts keep the raw LLM text.
+# Years run last so dates are already expanded by VoiceFormatter.
+TEXT_TRANSFORMS = [("*", VoiceFormatter()), ("*", speak_years)]
+
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
 
@@ -58,7 +72,10 @@ def create_speech_services():
 		compute_type=CONFIG.whisper_compute_type,
 		settings=WhisperSTTService.Settings(model=CONFIG.whisper_model, no_speech_prob=NO_SPEECH_PROB, initial_prompt=WHISPER_PROMPT),
 	)
-	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
+	tts = PiperTTSService(
+		settings=PiperTTSService.Settings(voice=CONFIG.piper_voice),
+		text_transforms=TEXT_TRANSFORMS,
+	)
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")])
 	return stt, tts
 
