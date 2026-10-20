@@ -145,7 +145,7 @@ public final class ChatModel {
                selectedSessionID == id {
                 turns = history
             }
-        case .unknown:
+        case .toolCall, .unknown:
             break
         }
     }
