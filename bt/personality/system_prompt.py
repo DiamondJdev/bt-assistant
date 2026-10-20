@@ -22,6 +22,7 @@ TOOLS_MARKER = "<!-- bt:tools -->"
 CONTEXT_MARKER = "<!-- bt:context -->"
 NO_TOOLS = "No tools are available."
 RECALL_LIMIT = 3
+RECALL_TURNS = 2
 
 _SOUL: str | None = None
 
@@ -88,6 +89,12 @@ def turn_note(user_text: str, *, session_id: str | None = None, turns: int | Non
 	if found:
 		lines.append("Stored memories matching this request. " + recall(found))
 	return " ".join(lines)
+
+
+# Short replies like "Yes." match no memory, so recall also searches the turn they answer.
+def recent_user_text(messages: Sequence[Mapping]) -> str:
+	texts = [m["content"] for m in messages if m.get("role") == "user" and isinstance(m.get("content"), str)]
+	return " ".join(texts[-RECALL_TURNS:])
 
 
 # The end of the latest user message is the only spot after the cached system prompt, tools and history.

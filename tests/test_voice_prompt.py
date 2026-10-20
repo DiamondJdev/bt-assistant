@@ -58,3 +58,23 @@ def test_voice_request_carries_turn_note_on_latest_user_message(monkeypatch):
         assert context.get_messages()[-1]['content'] == 'hi'
         await service.cleanup()
     asyncio.run(run())
+
+
+def test_voice_recall_searches_the_last_two_user_turns(monkeypatch):
+    async def run():
+        notes = []
+        async def stream(self, context):
+            return Stream()
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', stream)
+        monkeypatch.setattr(routing, 'turn_note', lambda text, **kw: notes.append(text) or 'NOTE')
+        service = routing.RoutedLLMService('s1')
+        context = LLMContext(messages=[
+            {'role': 'user', 'content': 'read my to-do list'},
+            {'role': 'assistant', 'content': 'Shall I proceed?'},
+            {'role': 'user', 'content': 'Yes.'},
+        ])
+        out = await service.get_chat_completions(context)
+        [chunk async for chunk in out]
+        assert notes == ['read my to-do list Yes.']
+        await service.cleanup()
+    asyncio.run(run())

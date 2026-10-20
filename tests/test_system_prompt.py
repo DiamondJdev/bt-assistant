@@ -47,3 +47,14 @@ def test_with_turn_note_appends_to_latest_user_message_without_mutating():
     out = system_prompt.with_turn_note(messages, 'NOTE')
     assert [m['content'] for m in out] == ['soul', 'old', 'reply', 'new\n\nNOTE', 'result']
     assert messages[3]['content'] == 'new'
+
+
+def test_recent_user_text_covers_short_follow_ups():
+    # "Yes." matches no memory, so recall also searches the turn it answers.
+    messages = [
+        {'role': 'user', 'content': 'hello'},
+        {'role': 'user', 'content': 'read my to-do list'},
+        {'role': 'assistant', 'content': 'Shall I proceed?'},
+        {'role': 'user', 'content': 'Yes.'},
+    ]
+    assert system_prompt.recent_user_text(messages) == 'read my to-do list Yes.'

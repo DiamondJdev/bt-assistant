@@ -11,7 +11,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 
 from bt.config import CONFIG
 from bt.llm.router import wants_escalation
-from bt.personality.system_prompt import render_system_prompt, turn_note, with_turn_note
+from bt.personality.system_prompt import recent_user_text, render_system_prompt, turn_note, with_turn_note
 
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
 # ~4k tokens at ~4 chars/token: with the ~2.3k-token prompt it leaves room for a reply in an 8k context.
@@ -82,12 +82,12 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 			else None
 		)
 
-	def _refresh_prompt(self, context: LLMContext, user_text: str) -> None:
+	def _refresh_prompt(self, context: LLMContext) -> None:
 		# No public per-turn hook: set pipecat's base and recompose so addons and later recomposes keep it.
 		# The prompt only changes when memories do; per-turn facts go in the turn note.
 		turns = sum(1 for m in context.get_messages() if m.get("role") == "user")
 		system = render_system_prompt(surface="voice")
-		note = turn_note(user_text, session_id=self.session_id, turns=turns)
+		note = turn_note(recent_user_text(context.get_messages()), session_id=self.session_id, turns=turns)
 		for service in (self, self._cloud):
 			if service is not None:
 				service._base_system_instruction = system + (NO_THINK if service is self else "")
@@ -96,7 +96,7 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 
 	async def get_chat_completions(self, context: LLMContext) -> AsyncIterator:
 		user_text = next((m.get("content", "") for m in reversed(context.get_messages()) if m.get("role") == "user"), "")
-		self._refresh_prompt(context, user_text if isinstance(user_text, str) else "")
+		self._refresh_prompt(context)
 		_trim(context)
 		use_cloud = isinstance(user_text, str) and wants_escalation(user_text)
 
