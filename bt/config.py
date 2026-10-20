@@ -61,8 +61,18 @@ class Config:
 
 	host: str = field(default_factory=lambda: os.environ.get("BT_HOST", "127.0.0.1"))
 
+	# Operator's name, given to BT as a runtime fact when set.
+	operator_name: str | None = field(default_factory=lambda: os.environ.get("BT_OPERATOR_NAME") or None)
+
 	# Storage (SQLite)
 	db_path: str = field(default_factory=lambda: os.environ.get("BT_DB_PATH", "bt.sqlite3"))
+
+	# Memory (markdown files). Same CWD-relative convention as db_path above.
+	memory_dir: str = field(default_factory=lambda: os.environ.get("BT_MEMORY_DIR", "memory"))
+
+	# Tools. On by default, but the kill switch stays until the local model's
+	# tool-calling has been exercised in anger.
+	tools_enabled: bool = field(default_factory=lambda: os.environ.get("BT_TOOLS", "1") == "1")
 
 	# Voice pipeline (Pipecat). Off unless explicitly enabled.
 	voice_enabled: bool = field(default_factory=lambda: _env_flag("BT_VOICE"))

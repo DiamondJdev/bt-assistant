@@ -9,7 +9,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 
 from bt.config import CONFIG
 from bt.llm.router import wants_escalation
-from bt.personality.system_prompt import SYSTEM_PROMPT
+from bt.personality.system_prompt import render_system_prompt
 
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
 MAX_MESSAGES = 50
@@ -38,22 +38,34 @@ async def _timed(stream) -> AsyncIterator:
 
 
 class RoutedLLMService(OLLamaLLMService):
-	def __init__(self) -> None:
+	def __init__(self, session_id: str | None = None) -> None:
+		system = render_system_prompt(surface="voice", session_id=session_id)
 		super().__init__(
 			base_url=CONFIG.ollama_url("v1"),
-			settings=self.Settings(model=CONFIG.ollama_model, system_instruction=SYSTEM_PROMPT),
+			settings=self.Settings(model=CONFIG.ollama_model, system_instruction=system),
 		)
+		self.session_id = session_id
 		self.compute = "ollama"
 		self._cloud = (
 			OpenAILLMService(
 				api_key=CONFIG.openai_api_key,
-				settings=OpenAILLMService.Settings(model=CONFIG.openai_model, system_instruction=SYSTEM_PROMPT, max_completion_tokens=1024),
+				settings=OpenAILLMService.Settings(model=CONFIG.openai_model, system_instruction=system, max_completion_tokens=1024),
 			)
 			if CONFIG.openai_api_key
 			else None
 		)
 
+	def _refresh_prompt(self, context: LLMContext) -> None:
+		# No public per-turn hook: set pipecat's base and recompose so addons and later recomposes keep it.
+		turns = sum(1 for m in context.get_messages() if m.get("role") == "user")
+		system = render_system_prompt(surface="voice", session_id=self.session_id, turns=turns)
+		for service in (self, self._cloud):
+			if service is not None:
+				service._base_system_instruction = system
+				service._compose_system_instruction()
+
 	async def get_chat_completions(self, context: LLMContext) -> AsyncIterator:
+		self._refresh_prompt(context)
 		_trim(context)
 		user_text = next((m.get("content", "") for m in reversed(context.get_messages()) if m.get("role") == "user"), "")
 		use_cloud = isinstance(user_text, str) and wants_escalation(user_text)

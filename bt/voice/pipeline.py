@@ -14,6 +14,10 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.frameworks.rtvi import (
+	RTVIFunctionCallReportLevel,
+	RTVIObserverParams,
+)
 from pipecat.processors.aggregators.llm_response_universal import (
 	LLMContextAggregatorPair,
 	LLMUserAggregatorParams,
@@ -25,6 +29,7 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat.utils.text.skip_tags_aggregator import SkipTagsAggregator
 
 from bt.config import CONFIG
+from bt.tools.registry import default_context, pipecat_tools
 from bt.transcript.store import get_store
 from bt.voice.persist import TranscriptObserver
 from bt.voice.routing import RoutedLLMService
@@ -73,9 +78,15 @@ def build_worker(websocket, session_id: str, history, speech_services, on_discon
 		await on_disconnect()
 
 	stt, tts = speech_services
-	llm = RoutedLLMService()
+	llm = RoutedLLMService(session_id)
+	tools = pipecat_tools() if CONFIG.tools_enabled else None
+
 	# Conversation history
-	context = LLMContext(messages=history or [])
+	context = (
+		LLMContext(messages=history or [], tools=tools)
+		if tools
+		else LLMContext(messages=history or [])
+	)
 
 	# This owns the VADController which decides when a turn starts and stops.
 	# NOTE: Frequent Cutoffs, Missed Speech, etc. are likely culprits of the VAD
@@ -99,9 +110,14 @@ def build_worker(websocket, session_id: str, history, speech_services, on_discon
 		params=PipelineParams(
 			enable_metrics=True, # Tracks and Passes metrics for DevUI
 			enable_usage_metrics=True,
-			# rate in Hz
+
+			# rates in Hz
 			audio_in_sample_rate=SAMPLE_RATE,
 			audio_out_sample_rate=SAMPLE_RATE,
+		),
+		app_resources=default_context(session_id, "voice") if tools else None,
+		rtvi_observer_params=RTVIObserverParams(
+			function_call_report_level={"*": RTVIFunctionCallReportLevel.FULL},
 		),
 		observers=[TranscriptObserver(get_store(), session_id, {llm: "ollama"})],
 	)

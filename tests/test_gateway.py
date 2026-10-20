@@ -41,7 +41,7 @@ def test_same_host_origin_is_accepted_behind_tls_proxy(client):
 
 
 def test_sessions_chat_validation_and_unknown_ids(client, monkeypatch):
-    async def reply(messages, text):
+    async def reply(messages, text, **kw):
         return LLMResponse('Hello pilot', 'ollama')
     monkeypatch.setattr(gateway, 'respond', reply)
     assert client.post('/chat', json={'text': '   '}).status_code == 422
