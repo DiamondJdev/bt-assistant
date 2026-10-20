@@ -20,6 +20,7 @@ from bt.tools.registry import ToolContext, tool
 log = logging.getLogger("bt.tools")
 
 VOICE_SKILL_CHARS = 2000
+SEARCH_BODY_CHARS = 600
 
 # ------------------------------ enviroment processing ----------------------------------
 
@@ -101,19 +102,26 @@ async def _ollama_reachable() -> bool:
 @tool(
 	name="memory_search",
 	description=(
-		"Search stored memories about the Pilot and the system. Returns names and "
-		"one-line descriptions; use memory_read for the full text of one."
+		"Search stored memories about the Pilot and the system. Returns each "
+		"match with its full text, so answer from the result directly."
 	),
 	properties={"query": {"type": "string", "description": "Words to look for."}},
 	required=("query",),
-	manifest="You can search your stored memories with memory_search and read one in full with memory_read.",
+	manifest="You can search your stored memories with memory_search; it returns their full text.",
 	timeout_secs=5.0,
 )
 async def memory_search(ctx: ToolContext, query: str) -> str:
 	found = ctx.memory.search(query)
 	if not found:
 		return f"No stored memory matches {query}."
-	return "Matching memories. " + " ".join(f"{m.name}: {m.description}" for m in found)
+	# Bodies are included because the local model rarely chains a second call to memory_read.
+	return "Matching memories. " + " ".join(f"{m.name}: {m.description} {_clip(m.body)}" for m in found)
+
+
+def _clip(body: str) -> str:
+	# ponytail: fixed cap keeps five matches inside a 4096-token context; raise it with num_ctx
+	body = body.strip()
+	return body if len(body) <= SEARCH_BODY_CHARS else body[:SEARCH_BODY_CHARS].rstrip() + " (truncated; memory_read has the rest)"
 
 
 @tool(

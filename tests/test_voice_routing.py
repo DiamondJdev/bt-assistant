@@ -115,12 +115,40 @@ def test_voice_history_trim_starts_on_user_turn(monkeypatch):
             return Stream(['ok'])
         monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
         roles = ['user', 'assistant'] * 30 + ['user']
-        context = LLMContext(messages=[{'role': r, 'content': str(i)} for i, r in enumerate(roles)])
+        context = LLMContext(messages=[{'role': r, 'content': f'{i} ' + 'x' * 1000} for i, r in enumerate(roles)])
         service = routing.RoutedLLMService()
         stream = await service.get_chat_completions(context)
         [chunk async for chunk in stream]
         messages = context.get_messages()
-        assert len(messages) <= 50 and messages[0]['role'] == 'user'
-        assert messages[-1]['content'] == '60'
+        assert sum(len(m['content']) for m in messages) <= routing.MAX_HISTORY_CHARS
+        assert messages[0]['role'] == 'user'
+        assert messages[-1]['content'].startswith('60 ')
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_history_trim_keeps_oversized_current_turn():
+    big = 'x' * routing.MAX_HISTORY_CHARS
+    context = LLMContext(messages=[
+        {'role': 'user', 'content': 'old'}, {'role': 'assistant', 'content': 'old'},
+        {'role': 'user', 'content': 'now'}, {'role': 'tool', 'content': big},
+    ])
+    routing._trim(context)
+    assert [m['content'] for m in context.get_messages()] == ['now', big]
+
+
+def test_voice_tool_call_only_reply_is_not_empty(monkeypatch):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]), finish_reason='tool_calls')])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+        local = ToolStream([])
+        async def local_stream(self, context):
+            return local
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        assert [chunk async for chunk in stream] == [call]
         await service.cleanup()
     asyncio.run(run())
