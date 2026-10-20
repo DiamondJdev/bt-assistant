@@ -55,3 +55,36 @@ def test_sessions_survive_reopening_database(tmp_path):
     assert store.list_sessions()[0]['id'] == sid
     assert store.list_sessions()[0]['label'] == 'Remember this'
     store.close()
+
+
+def test_user_turn_keeps_context(tmp_path):
+    store = TranscriptStore(str(tmp_path / 'bt.db'))
+    sid = store.new_session()
+    store.add_turn(sid, 'user', 'Hi', input_mode='text', context='Pomodoro idle')
+    assert store.history(sid)[0].context == 'Pomodoro idle'
+    assert 'Pomodoro idle' not in store.as_chat_messages(sid)[0]['content']
+    store.close()
+
+
+def test_existing_database_gains_context_column(tmp_path):
+    path = str(tmp_path / 'bt.db')
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE sessions (id TEXT PRIMARY KEY, started_at REAL NOT NULL, label TEXT);
+        CREATE TABLE turns (
+            id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), ts REAL NOT NULL,
+            role TEXT NOT NULL, text TEXT NOT NULL, input_mode TEXT, compute TEXT
+        );
+        INSERT INTO sessions VALUES ('s1', 0, NULL);
+        INSERT INTO turns VALUES ('t1', 's1', 1, 'user', 'Old', 'text', NULL);
+    """)
+    conn.commit()
+    conn.close()
+    store = TranscriptStore(path)
+    assert store.history('s1')[0].context is None
+    store.add_turn('s1', 'user', 'Next', context='x')
+    assert store.history('s1')[-1].context == 'x'
+    store.close()
+    store = TranscriptStore(path)  # reopening an upgraded database is a no-op
+    assert store.history('s1')[-1].context == 'x'
+    store.close()
