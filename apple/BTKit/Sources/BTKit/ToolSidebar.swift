@@ -7,6 +7,11 @@ public struct ToolSidebar: View {
         _model = State(initialValue: ToolSidebarModel(modules: modules))
     }
 
+    /// Uses a model the caller owns, so the app can change the selection.
+    public init(model: ToolSidebarModel) {
+        _model = State(initialValue: model)
+    }
+
     public var body: some View {
         NavigationSplitView {
             List(selection: $model.selectedModuleID) {
