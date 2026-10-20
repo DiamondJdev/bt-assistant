@@ -1,6 +1,7 @@
 """Local-first streaming with fallback before the first response token."""
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncIterator
 
@@ -13,19 +14,26 @@ from bt.llm.router import wants_escalation
 from bt.personality.system_prompt import render_system_prompt
 
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
-MAX_MESSAGES = 50
+# ~4k tokens at ~4 chars/token: with the ~2.3k-token prompt it leaves room for a reply in an 8k context.
+MAX_HISTORY_CHARS = 16_000
 log = logging.getLogger("bt.voice.routing")
 # Qwen3 soft switch; GGUF templates ignore reasoning_effort, and thinking ate the token budget.
 NO_THINK = "\n\n/no_think"
 
 
 def _trim(context: LLMContext) -> None:
-	# Bounds a long session's memory; starting on a user turn avoids orphaned replies.
+	# Overflowing the model context lets Ollama shift out the system prompt and tools, so budget by size.
+	# Starting on a user turn avoids orphaned replies; an oversized current turn is kept whole.
 	messages = context.get_messages()
-	if len(messages) <= MAX_MESSAGES:
+	sizes = [len(json.dumps(m, default=str)) for m in messages]
+	if sum(sizes) <= MAX_HISTORY_CHARS:
 		return
-	start = len(messages) - MAX_MESSAGES
-	start = next((i for i in range(start, len(messages)) if messages[i].get("role") == "user"), start)
+	start, total = len(messages), 0
+	while start > 0 and total + sizes[start - 1] <= MAX_HISTORY_CHARS:
+		start -= 1
+		total += sizes[start]
+	users = [i for i, m in enumerate(messages) if m.get("role") == "user"]
+	start = next((i for i in users if i >= start), users[-1] if users else start)
 	context.set_messages(messages[start:])
 
 
