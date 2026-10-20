@@ -17,11 +17,17 @@ struct ChatView: View {
                 }
             }
         }
-        .task {
+        .task(id: serverAddress) {
+            if model.serverAddress == serverAddress {
+                await model.loadSessions()
+                return
+            }
+            // Settings edits arrive per keystroke; wait until typing pauses.
+            if !model.serverAddress.isEmpty {
+                guard (try? await Task.sleep(for: .milliseconds(700))) != nil else { return }
+            }
             model.serverAddress = serverAddress
-            await model.loadSessions()
         }
-        .onChange(of: serverAddress) { _, address in model.serverAddress = address }
     }
 
     private var setup: some View {
@@ -79,7 +85,7 @@ struct ChatView: View {
                 HStack {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     Spacer()
-                    Button("Retry") { Task { await model.loadSessions() } }
+                    Button("Retry") { Task { await model.retry() } }
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 6)

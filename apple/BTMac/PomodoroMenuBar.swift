@@ -44,7 +44,11 @@ struct PomodoroMenuBarLabel: View {
     }
 
     private func toggle() {
-        let mainWindowVisible = NSApp.windows.contains { $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized }
+        // The Settings window can become main too, but it isn't the BT window.
+        let mainWindowVisible = NSApp.windows.contains {
+            $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized
+                && !($0.identifier?.rawValue ?? "").contains("Settings")
+        }
         if NSApp.isActive && mainWindowVisible {
             NSApp.hide(nil)
         } else {

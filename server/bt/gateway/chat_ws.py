@@ -146,11 +146,10 @@ class _Connection:
 		with ExitStack() as lease:
 			try:
 				lease.enter_context(store.conversation(self.session_id))
-			except KeyError:
-				await self.error("Conversation not found")
-				return
-			except RuntimeError:
-				await self.error(BUSY)
+			except (KeyError, RuntimeError) as exc:
+				# The client may already be gone; nothing else to clean up.
+				with suppress(Exception):
+					await self.error("Conversation not found" if isinstance(exc, KeyError) else BUSY)
 				return
 			try:
 				await self.answer(message)

@@ -120,6 +120,28 @@ struct ChatModelTests {
         #expect(factory.made.isEmpty)
     }
 
+    @Test func changingTheAddressClearsTheSelection() async {
+        let model = makeModel()
+        await model.select("s1")
+        model.serverAddress = "http://127.0.0.1:8080"
+        #expect(model.selectedSessionID == nil)
+
+        _ = await sendHi(model)
+        #expect(factory.urls.last == URL(string: "ws://127.0.0.1:8080/chat/ws")!)
+    }
+
+    @Test func retryReloadsAFailedHistory() async {
+        let model = makeModel()
+        api.historyFails = true
+        await model.select("s1")
+        #expect(model.errorMessage != nil && model.turns.isEmpty)
+
+        api.historyFails = false
+        await model.retry()
+        #expect(model.turns == api.turns)
+        #expect(model.errorMessage == nil)
+    }
+
     @Test func invalidAddressShowsSetupState() {
         let model = ChatModel()
         model.serverAddress = "bt.example.ts.net"
@@ -141,8 +163,13 @@ private final class FakeChatAPI: ChatAPI, @unchecked Sendable {
     let summaries = [ChatSessionSummary(id: "s1", label: "Chemistry", updatedAt: 2)]
     let turns = [ChatTurn(id: "t1", ts: 1, role: "user", text: "Study plan", compute: nil)]
 
+    var historyFails = false
+
     func sessions() async throws -> [ChatSessionSummary] { summaries }
-    func history(sessionID: String) async throws -> [ChatTurn] { turns }
+    func history(sessionID: String) async throws -> [ChatTurn] {
+        if historyFails { throw SendFailed() }
+        return turns
+    }
 }
 
 private struct SendFailed: Error {}

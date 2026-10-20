@@ -14,6 +14,8 @@ public final class ChatModel {
         didSet {
             guard serverAddress != oldValue else { return }
             reset()
+            // Session ids belong to the old server.
+            selectedSessionID = nil
             sessions = []
             Task { await loadSessions() }
         }
@@ -62,6 +64,14 @@ public final class ChatModel {
             if selectedSessionID == id { turns = history }
         } catch {
             if selectedSessionID == id { errorMessage = error.localizedDescription }
+        }
+    }
+
+    /// Reloads the list, and the selected conversation if its history never loaded.
+    public func retry() async {
+        await loadSessions()
+        if errorMessage == nil, turns.isEmpty, let id = selectedSessionID {
+            await select(id)
         }
     }
 
