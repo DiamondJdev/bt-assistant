@@ -100,7 +100,7 @@ public final class CodingModule: ToolModule {
     }
 
     public var content: AnyView {
-        AnyView(EmptyView())
+        AnyView(CodingView(module: self))
     }
 
     // MARK: Tools
