@@ -55,7 +55,15 @@ Phase 1 is complete as of October 20, 2026. `apple/BT.xcodeproj` runs the thin m
 
 Verification: six package tests pass, Debug and universal Release builds succeed, and the running macOS app shows the selected BT pane and preserves selection when the sidebar is hidden and shown. Signing is ad-hoc for local development. No server connection or iOS app has been implemented.
 
-Next: Phase 2, Pomodoro. See [the Apple client README](../../../apple/README.md) for build and test commands.
+Phase 2 is complete as of October 20, 2026. `apple/BTKit` has the Pomodoro module: a timer state machine that stores `endsAt`, a SwiftData `FocusSession` log, phase-end notifications, the pane with a now-playing card, five `focus_*` tool declarations and a one-line snapshot. `apple/BTMac` adds the menu bar countdown, the Music controller and the shared `ModelContainer`.
+
+Verification: 30 package tests pass and the Debug build succeeds. In the running app, a one-minute work phase counted down in the menu bar label, completed, logged 60 seconds to today's total and waited at the short break. With Music closed, the card reported it and Music stayed closed. The notification and Music Automation prompts still need the owner to answer them before those paths can be checked.
+
+Phase 3 is complete as of October 20, 2026. `apple/BTKit/Sources/BTKit/Calendar` holds the EventKit-backed `CalendarStore`, the `CalendarModule` with four `calendar_*` tool declarations and a next-event snapshot, and day, week and month views with quick create, an edit sheet and "this event" or "all future events" choices for repeating events. Subscribed calendars display as read-only.
+
+Verification: 51 package tests pass across both modules and the Debug build succeeds. On October 20 the owner ran the recurring-edit check against a throwaway weekly series. Moving occurrence 2 with `.thisEvent` changed only that occurrence. Renaming occurrence 3 with `.futureEvents` changed 3 and 4 and left 1 and 2 alone. The harness was then removed. Hand checks of the views are still pending.
+
+Next: Phase 4, global hotkey. See [the Apple client README](../../../apple/README.md) for build and test commands.
 
 ## Open questions
 

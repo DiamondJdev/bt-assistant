@@ -4,5 +4,15 @@
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <true/>
+    <key>com.apple.security.scripting-targets</key>
+    <dict>
+        <key>com.apple.Music</key>
+        <array>
+            <string>com.apple.Music.playback</string>
+            <string>com.apple.Music.library.read</string>
+        </array>
+    </dict>
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
 </dict>
 </plist>
