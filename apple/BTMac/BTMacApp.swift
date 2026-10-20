@@ -22,7 +22,7 @@ struct BTMacApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(id: "main") {
+        Window("BT", id: "main") {
             ToolSidebar(modules: [BTModule(), pomodoro])
                 .frame(minWidth: 640, minHeight: 400)
         }

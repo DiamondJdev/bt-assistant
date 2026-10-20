@@ -76,7 +76,7 @@ final class MusicController: NowPlayingSource {
             guard result.numberOfItems >= 3,
                   let state = result.atIndex(1)?.stringValue, state != "stopped"
             else { return .stopped }
-            let artwork = try? run("tell application \"Music\" to get data of artwork 1 of current track").get().data
+            let artwork = try? run("tell application \"Music\" to if (count of artworks of current track) > 0 then get data of artwork 1 of current track").get().data
             return .playing(NowPlayingTrack(
                 title: result.atIndex(2)?.stringValue ?? "",
                 artist: result.atIndex(3)?.stringValue ?? "",
