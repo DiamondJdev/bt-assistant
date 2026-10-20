@@ -9,7 +9,9 @@ TODO: Process on Client devices?
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
 from num2words import num2words
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -62,6 +64,10 @@ TEXT_TRANSFORMS = [("*", VoiceFormatter()), ("*", speak_years)]
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
 
+# Pipecat hardcodes ~/.cache, which is read-only under the systemd sandbox.
+def piper_cache_dir() -> Path:
+	return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "pipecat" / "piper"
+
 def create_speech_services():
 	# Model loading runs outside the event loop, before accepting voice traffic.
 	from pipecat.services.whisper.stt import WhisperSTTService
@@ -74,6 +80,7 @@ def create_speech_services():
 	)
 	tts = PiperTTSService(
 		settings=PiperTTSService.Settings(voice=CONFIG.piper_voice),
+		download_dir=piper_cache_dir(),
 		text_transforms=TEXT_TRANSFORMS,
 	)
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")])
