@@ -23,7 +23,9 @@ struct BTMacApp: App {
         let pomodoro = PomodoroModule(modelContext: container.mainContext, nowPlaying: MusicController())
         _pomodoro = State(initialValue: pomodoro)
         _clock = State(initialValue: PomodoroClock(pomodoro: pomodoro))
-        _sidebar = State(initialValue: ToolSidebarModel(modules: [BTModule(chat: ChatModel()), pomodoro, CalendarModule()]))
+        let coding = CodingModule(modelContext: container.mainContext)
+        coding.startWatching()
+        _sidebar = State(initialValue: ToolSidebarModel(modules: [BTModule(chat: ChatModel()), pomodoro, CalendarModule(), coding]))
     }
 
     var body: some Scene {

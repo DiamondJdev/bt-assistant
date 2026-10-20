@@ -1,0 +1,16 @@
+{
+	"name": "bt-heartbeat",
+	"displayName": "BT Heartbeat",
+	"description": "Records coding time for BT: project folder name and language only.",
+	"version": "0.0.1",
+	"publisher": "diamondjdev",
+	"private": true,
+	"main": "extension.js",
+	"activationEvents": ["onStartupFinished"],
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"scripts": {
+		"test": "node --test"
+	}
+}
