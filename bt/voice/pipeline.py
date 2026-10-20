@@ -38,9 +38,12 @@ from bt.voice.serializer import JSONFrameSerializer
 SAMPLE_RATE = 16_000
 
 # stop_secs is relaxed here to allow for mid-sentence pauses in one turn
-VAD_PARAMS = VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.6, min_volume=0.6)
+VAD_PARAMS = VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.8, min_volume=0.4)
 
 NO_SPEECH_PROB = 0.5 # Probability threshold for false positives in STT. Lower is more sensitive
+
+# Primes Whisper with the assistant's name and punctuated style; add names it keeps misspelling
+WHISPER_PROMPT = "Hey BT, what's on my calendar today? Remind me to call Mom at 5 p.m."
 
 def _vad() -> SileroVADAnalyzer:
 	return SileroVADAnalyzer(sample_rate=SAMPLE_RATE, params=VAD_PARAMS)
@@ -53,7 +56,7 @@ def create_speech_services():
 	stt = WhisperSTTService(
 		device=CONFIG.whisper_device,
 		compute_type=CONFIG.whisper_compute_type,
-		settings=WhisperSTTService.Settings(model=CONFIG.whisper_model, no_speech_prob=NO_SPEECH_PROB),
+		settings=WhisperSTTService.Settings(model=CONFIG.whisper_model, no_speech_prob=NO_SPEECH_PROB, initial_prompt=WHISPER_PROMPT),
 	)
 	tts = PiperTTSService(settings=PiperTTSService.Settings(voice=CONFIG.piper_voice))
 	tts._text_aggregator = SkipTagsAggregator(tags=[("<think>", "</think>")])
