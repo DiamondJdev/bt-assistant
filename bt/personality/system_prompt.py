@@ -87,7 +87,7 @@ def _memory_lines() -> list[str]:
 		return []
 	if not index:
 		return ["You have no stored memories yet."]
-	return ["These memories are stored. Use memory_read for the full text of one."] + index
+	return ["These memories are stored. Only the titles are shown below, not the contents. Call memory_read before answering anything about one."] + index
 
 
 def __getattr__(name: str) -> str:
