@@ -12,7 +12,17 @@ public final class PomodoroModule: ToolModule {
     public let symbol = "timer"
     public let tools: [ToolDefinition] = [
         ToolDefinition(name: "focus_get_status", description: "Current Pomodoro phase, time remaining, and minutes focused today."),
-        ToolDefinition(name: "focus_start", description: "Start or resume the Pomodoro timer.", needsApproval: true),
+        ToolDefinition(
+            name: "focus_start",
+            description: "Start or resume the Pomodoro timer. Without phase it starts the phase that is up next. "
+                + "With a different phase it ends the current one and starts that phase.",
+            parameters: [
+                "type": "object",
+                "properties": ["phase": ["type": "string", "enum": ["work", "short_break", "long_break"]]],
+                "additionalProperties": false,
+            ],
+            needsApproval: true
+        ),
         ToolDefinition(name: "focus_pause", description: "Pause the running Pomodoro phase.", needsApproval: true),
         ToolDefinition(name: "focus_stop", description: "Stop the Pomodoro timer and log any work time of at least one minute.",
                        needsApproval: true),
@@ -69,6 +79,15 @@ public final class PomodoroModule: ToolModule {
         scheduleNotification()
     }
 
+    /// Starts `phase`, ending a different active or waiting phase first.
+    public func start(_ phase: PomodoroPhase) {
+        if phase != state.phase {
+            finish(state.switched(to: phase, at: now()))
+            enqueue { await $0.cancelAll() }
+        }
+        start()
+    }
+
     public func pause() {
         guard state.isRunning else { return }
         state = state.paused(at: now())
@@ -114,12 +133,13 @@ public final class PomodoroModule: ToolModule {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
+    /// Remaining time matches the menu bar to the second, so BT quotes what the owner sees.
     public var snapshot: String? {
         let today = "\(Self.format(todayFocused)) focused today."
-        guard let remaining = remaining() else { return "Focus: idle, \(today)" }
+        let phase = Self.describe(state.phase)
+        guard let left = menuBarTitle else { return "Focus: idle, \(phase) up next, \(today)" }
         let paused = state.isPaused ? " paused" : ""
-        let left = Self.format(remaining, roundingUp: true)
-        return "Focus: \(Self.describe(state.phase))\(paused), \(left) left, \(today)"
+        return "Focus: \(phase)\(paused), \(left) left, \(today)"
     }
 
     public var content: AnyView {
@@ -131,7 +151,8 @@ public final class PomodoroModule: ToolModule {
     /// Controls return the snapshot after the change so the model can confirm it in one call.
     public func call(_ name: String, arguments: Data) async throws -> String {
         switch name {
-        case "focus_start": start()
+        case "focus_start":
+            if let phase = try Self.phaseArgument(arguments) { start(phase) } else { start() }
         case "focus_pause": pause()
         case "focus_stop": stop()
         case "focus_get_status": break
@@ -155,6 +176,20 @@ public final class PomodoroModule: ToolModule {
         return ([summary] + lines).joined(separator: "\n")
     }
 
+    private static func phaseArgument(_ arguments: Data) throws -> PomodoroPhase? {
+        struct Arguments: Decodable { let phase: String? }
+        guard let arguments = try? JSONDecoder().decode(Arguments.self, from: arguments) else {
+            throw ToolError.badArguments("expected an object with an optional phase")
+        }
+        switch arguments.phase {
+        case nil: return nil
+        case "work": return .work
+        case "short_break": return .shortBreak
+        case "long_break": return .longBreak
+        case let other?: throw ToolError.badArguments("phase must be work, short_break or long_break, not \(other)")
+        }
+    }
+
     /// Waits for queued notification work; used by tests.
     func notificationsSettled() async {
         await notifierTask?.value
@@ -169,8 +204,8 @@ public final class PomodoroModule: ToolModule {
     }
 
     /// `1h 35m`, or `35m` under an hour.
-    static func format(_ interval: TimeInterval, roundingUp: Bool = false) -> String {
-        let minutes = Int((interval / 60).rounded(roundingUp ? .up : .down))
+    static func format(_ interval: TimeInterval) -> String {
+        let minutes = Int(interval / 60)
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 

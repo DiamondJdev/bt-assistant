@@ -110,6 +110,14 @@ public struct PomodoroState: Codable, Equatable, Sendable {
         (.idle, partialWork(at: date))
     }
 
+    /// Ends any active phase and waits at `phase`, keeping the work-phase count toward the long break.
+    public func switched(to phase: PomodoroPhase, at date: Date) -> (PomodoroState, FocusInterval?) {
+        var next = PomodoroState.idle
+        next.phase = phase
+        next.completedWorkPhases = completedWorkPhases
+        return (next, partialWork(at: date))
+    }
+
     private func partialWork(at date: Date) -> FocusInterval? {
         guard phase == .work, let startedAt, let remaining = remaining(at: date) else { return nil }
         let elapsed = phaseDuration - remaining

@@ -118,18 +118,18 @@ struct PomodoroModuleTests {
         try FocusLog(context: container.mainContext)
             .record(FocusInterval(start: clock.now - 6000, end: clock.now - 300), label: nil)
 
-        #expect(module.snapshot == "Focus: idle, 1h 35m focused today.")
+        #expect(module.snapshot == "Focus: idle, work phase up next, 1h 35m focused today.")
         #expect(module.menuBarTitle == nil)
 
         module.start()
-        clock.now += 1500 - 720
+        clock.now += 1500 - 726
 
-        #expect(module.snapshot == "Focus: work phase, 12m left, 1h 35m focused today.")
-        #expect(module.menuBarTitle == "12:00")
+        #expect(module.snapshot == "Focus: work phase, 12:06 left, 1h 35m focused today.")
+        #expect(module.menuBarTitle == "12:06")
 
         module.pause()
 
-        #expect(module.snapshot == "Focus: work phase paused, 12m left, 1h 35m focused today.")
+        #expect(module.snapshot == "Focus: work phase paused, 12:06 left, 1h 35m focused today.")
     }
 
     @Test func declaresFocusTools() {
@@ -149,16 +149,55 @@ struct PomodoroModuleTests {
         let module = makeModule()
         let none = Data("{}".utf8)
 
-        #expect(try await module.call("focus_start", arguments: none) == "Focus: work phase, 25m left, 0m focused today.")
+        #expect(try await module.call("focus_start", arguments: none) == "Focus: work phase, 25:00 left, 0m focused today.")
         #expect(module.state.isRunning)
         clock.now += 600
-        #expect(try await module.call("focus_pause", arguments: none) == "Focus: work phase paused, 15m left, 0m focused today.")
+        #expect(try await module.call("focus_pause", arguments: none) == "Focus: work phase paused, 15:00 left, 0m focused today.")
         #expect(module.state.isPaused)
         #expect(try await module.call("focus_get_status", arguments: none) == module.snapshot)
-        #expect(try await module.call("focus_stop", arguments: none) == "Focus: idle, 10m focused today.")
+        #expect(try await module.call("focus_stop", arguments: none) == "Focus: idle, work phase up next, 10m focused today.")
         #expect(module.state == .idle)
         await #expect(throws: ToolError.unknownTool("focus_nope")) {
             _ = try await module.call("focus_nope", arguments: none)
+        }
+    }
+
+    @Test func startWithAPhaseReplacesTheWaitingBreak() async throws {
+        let module = makeModule()
+        module.skip()
+        #expect(module.snapshot == "Focus: idle, short break up next, 0m focused today.")
+
+        let started = try await module.call("focus_start", arguments: Data(#"{"phase":"work"}"#.utf8))
+
+        #expect(started == "Focus: work phase, 25:00 left, 0m focused today.")
+        #expect(module.state.completedWorkPhases == 1)
+    }
+
+    @Test func startWithAPhaseEndsTheRunningOneAndLogsItsWork() async throws {
+        let module = makeModule()
+        module.start()
+        clock.now += 600
+
+        let started = try await module.call("focus_start", arguments: Data(#"{"phase":"short_break"}"#.utf8))
+
+        #expect(started == "Focus: short break, 5:00 left, 10m focused today.")
+        #expect(try sessions().count == 1)
+    }
+
+    @Test func startWithoutAPhaseOrWithTheSameOneKeepsTheTimer() async throws {
+        let module = makeModule()
+        module.start()
+        clock.now += 600
+
+        _ = try await module.call("focus_start", arguments: Data(#"{"phase":"work"}"#.utf8))
+
+        #expect(module.remaining() == 900)
+        #expect(try sessions().isEmpty)
+    }
+
+    @Test func startRejectsAnUnknownPhase() async {
+        await #expect(throws: ToolError.self) {
+            _ = try await makeModule().call("focus_start", arguments: Data(#"{"phase":"nap"}"#.utf8))
         }
     }
 
