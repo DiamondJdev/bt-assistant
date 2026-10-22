@@ -4,5 +4,10 @@ import Observation
 @MainActor
 @Observable
 public final class BTScreenState {
+    /// The composer text.
+    public var draft = ""
+    /// "See all" in BT remembers.
+    public var showAllMemories = false
+
     public init() {}
 }
