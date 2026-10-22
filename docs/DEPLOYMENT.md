@@ -6,16 +6,16 @@ BT runs as one server process for one owner. Your Mac and iPhone use the browser
 
 The systemd unit itself is not shipped from this repo — it lives in the host's own NixOS configuration, since it needs host-specific choices (service user, checkout path, state/cache directories). This repo only provides the application and its Nix dev shell.
 
-1. Clone this checkout wherever the host's module expects it (readable/executable by whichever user the module runs the service as). Install dependencies with the repository's Nix shell:
+1. The server runs releases that `bt-deploy` builds from `main` (see [Updates](#updates)), so production doesn't need a checkout. A manual checkout is for development. To set one up, install dependencies with the repository's Nix shell:
 
    ```sh
    cd bt-assistant/server
    nix develop ./nix --command uv sync --frozen --no-dev --python python3.11 --no-python-downloads
    ```
 
-   The backend lives in the `server/` subdirectory, so the host module's working directory and executable are `<checkout>/server` and `<checkout>/server/.venv/bin/bt`. Python must come from Nix, not a downloaded uv interpreter. The host's systemd unit should run `server/.venv/bin/bt` directly rather than `uv run bt`, so the service never re-resolves the environment (or needs network access) at startup or on a crash restart. For reproducible upgrades, check out a reviewed commit and rerun `uv sync` while the service is stopped.
+   The backend lives in the `server/` subdirectory, so the host module's working directory and executable are `<checkout>/server` and `<checkout>/server/.venv/bin/bt`. Python must come from Nix, not a downloaded uv interpreter. The host's systemd unit should run `server/.venv/bin/bt` directly rather than `uv run bt`, so the service never re-resolves the environment (or needs network access) at startup or on a crash restart. Each release that `bt-deploy` builds gets the same `uv sync --frozen` before its tests run.
 
-2. Optionally create `/etc/bt.env`, owned by root with mode `0600`, for provider settings and secrets. Keep secrets out of Nix expressions and Git.
+2. Create `/etc/bt-assistant/bt.env`, owned by root with mode `0600`, for provider settings and secrets. The service won't start without it. Settings go here, not in a `.env` inside a checkout: a release built from git has no `.env`. Leave out `BT_HOST`, `BT_DB_PATH` and `BT_MEMORY_DIR`. The host module sets those, and values in this file would override them. Keep secrets out of Nix expressions and Git.
 
    ```dotenv
    BT_OLLAMA_MODEL=qwen3:8b
@@ -31,11 +31,12 @@ The systemd unit itself is not shipped from this repo — it lives in the host's
 
    ```nix
    services.bt-assistant.enable = true;
+   services.bt-deploy.enable = true;
    services.ollama.enable = true;
    services.tailscale.enable = true;
    ```
 
-   Run your normal `nixos-rebuild` command. The service starts at boot and restarts after a crash. The database and model cache live under directories systemd manages (`StateDirectory`/`CacheDirectory`), outside the checkout, which otherwise stays sandboxed off the rest of the host's filesystem. Confirm startup with `systemctl status bt-assistant` and `journalctl -u bt-assistant -n 50`. BT fails startup when voice dependencies cannot load; `/health` alone does not verify inference.
+   Run your normal `nixos-rebuild` command. The service runs from `/var/lib/bt-deploy/current`, which doesn't exist until the first deploy, so BT stays down after the first switch until you run `bt-deploy now`. Log out and back in first so your user's new `systemd-journal` group applies. After that, the service starts at boot and restarts after a crash. The database and model cache live under directories systemd manages (`StateDirectory`/`CacheDirectory`); the code is read-only to the service, and the rest of the host's filesystem stays hidden from it. Confirm startup with `systemctl status bt-assistant` and `journalctl -u bt-assistant -n 50`. BT fails startup when voice dependencies cannot load; `/health` alone does not verify inference.
 
 4. Expose the loopback service privately:
 
@@ -52,16 +53,34 @@ The systemd unit itself is not shipped from this repo — it lives in the host's
 
 The browser microphone needs HTTPS or localhost. iOS background/lock-screen listening and wake words are outside this release. Denying microphone permission leaves typed chat available. Every device that can reach BT sees every conversation; this is not a multi-user service. To revoke a device, remove its tailnet access.
 
+## Updates
+
+The server deploys `main` by itself. Two minutes after the last check finished, a timer fetches `main` from GitHub. When it finds a new commit, `bt-deploy` exports it into `/var/lib/bt-deploy/releases/<sha>`, runs `uv sync` and `pytest` there as the service user, and only then backs up the database, points `current` at the new release and restarts BT. A merge to `main` is usually live a few minutes later, depending on how long the tests take. If `/ready` doesn't answer within 180 seconds, `current` goes back to the previous release and BT restarts on it.
+
+Run these on the server as the owner, without `sudo`:
+
+- `bt-deploy status` prints the last and next check, the newest commit on `main`, the commit under test, the live release, the commit the running process uses, and the last failure.
+- `bt-deploy now` runs a check right away and streams its log. If the timer's check is already running, it waits for that one instead of starting a second.
+- `bt-deploy log` shows the last 50 lines of the deploy journal. Extra arguments go to `journalctl`, for example `bt-deploy log -f`.
+
+From a laptop, `dj deploy status`, `dj deploy now` and `dj deploy log` run the same commands over SSH.
+
+A commit whose tests fail, or that doesn't become ready, is recorded in `/var/lib/bt-deploy/failed/<sha>` with a one-line reason and is never retried. The log shows `tests failed <sha>` or `not ready <sha>, rolled back to <sha>`, and later checks print `skipped, failed before`. To deploy a fix, merge a new commit.
+
+Before each restart, `bt-deploy` copies the database to `/var/lib/bt-deploy/backups/<previous-sha>-<UTC time>.sqlite3` and keeps the five newest copies. A rollback only switches the code back. If the failed release ran a database migration before it stopped, the old code now sees the migrated schema. To undo that, stop BT and restore the matching backup by hand, following the steps in the next section.
+
 ## Backups and restore
 
-No automated backup timer is wired up yet — that's a gap in the current deployment, not a feature of this release. Until one exists, back up manually with SQLite's online backup API (safe against a running writer) rather than copying the database file directly:
+`bt-deploy` backs up the database before every deploy that restarts BT (see Updates). Those copies live in `/var/lib/bt-deploy/backups/`, which only root can read, and only the five newest are kept. Nothing backs up the database between deploys, and nothing copies it off the server.
+
+For a backup at any other time, use SQLite's online backup, which is safe while BT is writing. Copying the database file directly is not.
 
 ```sh
 sqlite3 /path/to/bt.sqlite3 ".backup /path/to/snapshot.sqlite3"
 sqlite3 /path/to/snapshot.sqlite3 "PRAGMA integrity_check;"  # must print "ok"
 ```
 
-For a restore, stop BT first and preserve the current database and any WAL/SHM files before replacing anything, then install the verified snapshot in their place and restart the service. Confirm an expected conversation is present before deleting any preserved files.
+To restore, stop BT and keep a copy of the current database and any WAL/SHM files before replacing anything. Then put the snapshot in their place and start BT. Check that a conversation you expect is there before deleting the copies. A deploy backup needs `sudo` to read, and its name includes the commit that was live when it was taken.
 
 ## Limits and recovery
 
