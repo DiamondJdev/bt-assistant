@@ -30,7 +30,7 @@ public struct SampleData {
             startedAt: now.addingTimeInterval(-378)
         )
         focusedTodaySeconds = 31 * 60
-        projects = Self.projects(at: at, todayIndex: todayIndex)
+        projects = Self.projects(at: at, todayIndex: todayIndex, now: now)
         memories = SampleData.btMemories(now: now)
         todos = SampleData.btTodos(now: now)
         threads = SampleData.btThreads(now: now)
@@ -74,62 +74,83 @@ public struct SampleData {
         ]
     }
 
-    /// Projects from Code.dc.html. Activity hours per weekday follow each project's 7-day spark;
-    /// today's hours follow Today's code-time line (bt-client 1h48 · tariffninja 52m · mirai 32m).
-    private static func projects(at: (Int, Double) -> Date, todayIndex t: Int) -> [Project] {
-        func activity(_ id: String, _ hoursByDay: [Double], todayHours: Double) -> [CodingActivity] {
-            var hours = hoursByDay
-            for i in hours.indices where i > t { hours[i] = 0 }
-            if t < hours.count { hours[t] = todayHours }
-            return hours.enumerated().compactMap { day, h in
-                guard h > 0 else { return nil }
-                let start = at(day, day == t ? 10 : 20)
-                return CodingActivity(
-                    start: start, end: start.addingTimeInterval(h * 3600), projectID: id,
-                    insideFocusSessionID: day == t ? "focus-now" : nil, source: .agent
-                )
-            }
+    /// Projects from Code.dc.html. Activity is agent runs and reviews, mostly in the evening;
+    /// today's totals follow Today's code-time line (bt-client 1h48 · tariffninja 52m · mirai 32m).
+    /// Days are relative to this week's Monday; past days after today are dropped.
+    private static func projects(at: (Int, Double) -> Date, todayIndex t: Int, now: Date) -> [Project] {
+        func run(_ id: String, _ day: Int, _ hour: Double, _ minutes: Double, focus: String? = nil,
+                 _ source: ActivitySource = .agent) -> CodingActivity {
+            let start = at(day, hour)
+            return CodingActivity(start: start, end: start.addingTimeInterval(minutes * 60), projectID: id,
+                                  insideFocusSessionID: focus, source: source)
         }
-        func stage(_ i: Int, _ name: String, _ status: StageStatus, progress: Double = 0, tasks: [RoadmapTask] = []) -> RoadmapStage {
-            RoadmapStage(id: "s\(i)", index: i, name: name, status: status, progress: progress, tasks: tasks)
+        /// Mockup weekdays before today, plus today's runs and three earlier weeks.
+        func week(_ past: [CodingActivity], today: [CodingActivity], earlier: [CodingActivity]) -> [CodingActivity] {
+            let todayStart = at(t, 0)
+            return earlier + past.filter { $0.start < todayStart } + today
         }
+        func stage(_ i: Int, _ name: String, _ status: StageStatus, done: Int? = nil, target: Int? = nil,
+                   progress: Double = 0, tasks: [RoadmapTask] = []) -> RoadmapStage {
+            RoadmapStage(id: "s\(i)", index: i, name: name, status: status, targetDate: target.map { at($0, 12) },
+                         completedDate: done.map { at($0, 12) }, progress: progress, tasks: tasks)
+        }
+        // bt-client's last run ends now, so it reads "Coding now".
+        let btLatest = max(now.addingTimeInterval(-48 * 60), at(t, 10.1))
+        let bt = "bt-client", tn = "tariffninja", mi = "mirai"
         return [
             Project(
-                id: "bt-client", name: "bt-client", path: "~/dev/bt-client", stack: "Swift", branch: "main", weeklyGoalHours: 10,
+                id: bt, name: "bt-client", path: "~/dev/bt-client", stack: "Swift", branch: "main", weeklyGoalHours: 10,
                 stages: [
-                    stage(1, "BT chat client", .done, progress: 1),
-                    stage(2, "Focus + Pomodoro", .done, progress: 1),
-                    stage(3, "Calendar sync", .current, progress: 0.7, tasks: [
+                    stage(1, "BT chat client", .done, done: -31, progress: 1),
+                    stage(2, "Focus + Pomodoro", .done, done: -10, progress: 1),
+                    stage(3, "Calendar sync", .current, target: 11, progress: 0.7, tasks: [
                         RoadmapTask(id: "t1", title: "EventKit adapter", status: .done),
                         RoadmapTask(id: "t2", title: "Focus writes to calendar", status: .done),
                         RoadmapTask(id: "t3", title: "DST recurrence", status: .inReview),
                         RoadmapTask(id: "t4", title: "Sync conflict UI", status: .needsYou),
                     ]),
-                    stage(4, "Code Time module", .next),
-                    stage(5, "iOS client", .next),
+                    stage(4, "Code Time module", .next, target: 30),
+                    stage(5, "iOS client", .next, target: 50),
                     stage(6, "BT OS v1.0", .final),
                 ],
-                activity: activity("bt-client", [1.6, 0.3, 0.4, 2.6, 0, 0, 0], todayHours: 1.8)
+                activity: week(
+                    [
+                        run(bt, 0, 14, 45, focus: "f-mon"), run(bt, 0, 14.75, 45, focus: "f-mon", .review),
+                        run(bt, 0, 20, 30), run(bt, 0, 20.5, 20, .review), run(bt, 0, 20.92, 20),
+                        run(bt, 1, 21, 20), run(bt, 1, 21.34, 10, .review),
+                        run(bt, 2, 22, 20), run(bt, 2, 22.34, 22, .review),
+                    ],
+                    today: [
+                        run(bt, t, 9, 45, focus: "focus-am"), run(bt, t, 9.75, 15, focus: "focus-am", .review),
+                        CodingActivity(start: btLatest, end: btLatest.addingTimeInterval(48 * 60), projectID: bt,
+                                       insideFocusSessionID: "focus-now", source: .agent),
+                    ],
+                    earlier: [run(bt, -6, 14, 149), run(bt, -13, 14, 300), run(bt, -20, 14, 280)]
+                )
             ),
             Project(
-                id: "tariffninja", name: "tariffninja", path: "~/work/tariffninja", stack: "TypeScript", branch: "develop", weeklyGoalHours: 4,
+                id: tn, name: "tariffninja", path: "~/work/tariffninja", stack: "TypeScript", branch: "develop", weeklyGoalHours: 4,
                 stages: [
-                    stage(1, "PSC filing engine", .done, progress: 1),
-                    stage(2, "Refund tracker", .done, progress: 1),
-                    stage(3, "PSC batch export", .current, progress: 0.45, tasks: [
+                    stage(1, "PSC filing engine", .done, done: -91, progress: 1),
+                    stage(2, "Refund tracker", .done, done: -24, progress: 1),
+                    stage(3, "PSC batch export", .current, target: 18, progress: 0.45, tasks: [
                         RoadmapTask(id: "t1", title: "CSV schema", status: .done),
                         RoadmapTask(id: "t2", title: "Batch validation", status: .inReview),
                         RoadmapTask(id: "t3", title: "ACE upload format", status: .needsYou),
                     ]),
-                    stage(4, "Broker portal", .next),
+                    stage(4, "Broker portal", .next, target: 35),
                     stage(5, "[Next milestone]", .final),
                 ],
-                activity: activity("tariffninja", [1, 0.6, 0.3, 0, 0, 0, 0], todayHours: 52.0 / 60)
+                activity: week(
+                    [run(tn, 0, 9.17, 40, focus: "f-tn"), run(tn, 1, 9.5, 20, .review)],
+                    today: [run(tn, t, 10.08, 20), run(tn, t, 10.5, 15, .review), run(tn, t, 10.75, 17)],
+                    earlier: [run(tn, -6, 9, 190), run(tn, -13, 9, 180), run(tn, -20, 9, 200)]
+                )
             ),
             Project(
-                id: "mirai", name: "mirai", path: "~/dev/mirai", stack: "TypeScript", branch: "main",
+                id: mi, name: "mirai", path: "~/dev/mirai", stack: "TypeScript", branch: "main",
                 stages: [
-                    stage(1, "Counselor chat", .done, progress: 1),
+                    stage(1, "Counselor chat", .done, done: -59, progress: 1),
                     stage(2, "Essay feedback", .current, progress: 0.3, tasks: [
                         RoadmapTask(id: "t1", title: "Rubric prompts", status: .done),
                         RoadmapTask(id: "t2", title: "Inline comments", status: .inProgress),
@@ -138,9 +159,16 @@ public struct SampleData {
                     stage(3, "Pricing + paywall", .next),
                     stage(4, "Public launch", .final),
                 ],
-                activity: activity("mirai", [0.2, 0, 0.2, 0.6, 0, 0, 0], todayHours: 32.0 / 60)
+                activity: week(
+                    [run(mi, 0, 19.17, 12), run(mi, 2, 19, 15, .review)],
+                    today: [run(mi, t, 11.33, 32, focus: "f-mirai")],
+                    earlier: [run(mi, -6, 19, 60), run(mi, -13, 19, 55), run(mi, -20, 19, 65)]
+                )
             ),
-            Project(id: "waypave", name: "waypave", path: "~/work/waypave", stack: "Python"),
+            Project(
+                id: "waypave", name: "waypave", path: "~/work/waypave", stack: "Python",
+                activity: [run("waypave", t - 9, 15, 40)]
+            ),
         ]
     }
 }
