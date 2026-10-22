@@ -20,6 +20,10 @@ public struct BTAppView: View {
         .foregroundStyle(Color.btInk)
         .font(.inter(14))
         .tint(.btAccent)
+        // Here, not on Focus, so a break that starts on another screen still pauses music.
+        .onChange(of: store.focus.mode) { _, mode in
+            if mode == .break { store.pauseMusicForBreak() }
+        }
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))

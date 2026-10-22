@@ -22,9 +22,6 @@ public struct FocusScreen: View {
             BTNoteCell(note: summary.btNote) { store.open(.bt()) }
                 .gridCell(3, 2)
         }
-        .onChange(of: store.focus.mode) { _, mode in
-            if mode == .break { store.pauseMusicForBreak() }
-        }
     }
 }
 

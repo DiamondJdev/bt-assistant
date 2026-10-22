@@ -75,10 +75,12 @@ struct TodayBTCell: View {
             } else {
                 BTStatement(label: "BT · read 3 modules", meta: TodayFormat.clock(store.now, store.calendar),
                             clauses: store.todayProposal) {
-                    Button("Book \(TodayFormat.clock(store.todayBookingSlot.start, store.calendar))") {
-                        store.bookTodaySession()
+                    if let slot = store.todayBookingSlot {
+                        Button("Book \(TodayFormat.clock(slot.start, store.calendar))") {
+                            store.bookTodaySession()
+                        }
+                        .buttonStyle(.pill(.cta))
                     }
-                    .buttonStyle(.pill(.cta))
                     Button("Reply") { store.open(.bt()) }.buttonStyle(.pill(.secondary))
                 }
             }

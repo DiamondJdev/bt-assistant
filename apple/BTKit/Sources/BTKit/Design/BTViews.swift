@@ -160,8 +160,9 @@ public struct EventBlockView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Self.fill(kind))
         .overlay(border)
-        .overlay(isSelected ? Rectangle().stroke(Color.btAccent, lineWidth: 3).padding(-1.5) : nil)
         .clipped()
+        .overlay(isSelected ? Rectangle().strokeBorder(Color.btInk, lineWidth: 1.5) : nil)
+        .overlay(isSelected ? Rectangle().stroke(Color.btAccent, lineWidth: 3).padding(-1.5) : nil)
     }
 
     @ViewBuilder private var border: some View {

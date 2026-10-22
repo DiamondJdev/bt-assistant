@@ -127,16 +127,30 @@ extension AppStore {
         return CodeTimeSummary(perProject: perProject.filter { $0.seconds >= 60 }.sorted { $0.seconds > $1.seconds })
     }
 
-    /// Time today for the next session ("Book 2:55").
-    var todayBookingSlot: (start: Date, end: Date) {
-        let day = calendar.startOfDay(for: now)
-        let start = calendar.date(byAdding: .minute, value: 14 * 60 + 55, to: day)!
-        return (start, start.addingTimeInterval(50 * 60))
+    /// First free 50-minute slot today, 10 minutes after something ends ("Book 2:55").
+    /// Nil when nothing fits before 11 PM.
+    var todayBookingSlot: (start: Date, end: Date)? {
+        let length: TimeInterval = 50 * 60, buffer: TimeInterval = 10 * 60
+        let latestEnd = calendar.date(bySettingHour: 23, minute: 0, second: 0, of: now)!
+        let busy = events(on: now).filter { $0.kind != .deadline && $0.kind != .focusLogged }
+        let fiveMinutes: TimeInterval = 300
+        let soon = Date(timeIntervalSinceReferenceDate: (now.timeIntervalSinceReferenceDate / fiveMinutes).rounded(.up) * fiveMinutes)
+        let candidates = ([soon] + busy.map { $0.end.addingTimeInterval(buffer) }).filter { $0 >= now }.sorted()
+        // Prefer a slot after the next event, as BT suggests working until then.
+        let after = nextEventToday.map { $0.end.addingTimeInterval(buffer) } ?? soon
+        let start = candidates.first { start in
+            start >= after && start.addingTimeInterval(length) <= latestEnd
+                && !busy.contains { $0.start < start.addingTimeInterval(length) && start < $0.end }
+        }
+        return start.map { ($0, $0.addingTimeInterval(length)) }
     }
 
     /// The pre-booking BT sentence.
     var todayProposal: [Clause] {
-        let session = Clause("session \(focus.number + 1) at \(TodayFormat.clock(todayBookingSlot.start, calendar)).", .accent)
+        guard let slot = todayBookingSlot else {
+            return [Clause("Today is full. "), Clause("Nothing free for another session before 11.", .muted)]
+        }
+        let session = Clause("session \(focus.number + 1) at \(TodayFormat.clock(slot.start, calendar)).", .accent)
         let task = "Finish the \(TodayFormat.lowercasedFirst(focus.taskTitle))"
         guard let next = nextEventToday else {
             return [Clause("Nothing else on your calendar today. "), Clause("\(task), and I’ll put", .muted), Clause(" "), session]
@@ -161,8 +175,7 @@ extension AppStore {
 
     /// "Book 2:55": adds a Focus-linked study block and a ledger entry that undoes it.
     func bookTodaySession() {
-        guard todayBookedEvent == nil else { return }
-        let slot = todayBookingSlot
+        guard todayBookedEvent == nil, let slot = todayBookingSlot else { return }
         let event = CalendarEvent(
             title: "Focus — session \(focus.number + 1)", start: slot.start, end: slot.end,
             kind: .studyPlanned, source: .bt, runAsFocus: true, focusPlan: "50/10", linkedProjectID: focus.projectID

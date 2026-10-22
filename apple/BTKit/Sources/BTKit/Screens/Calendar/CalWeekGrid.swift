@@ -127,9 +127,6 @@ struct CalWeekGrid: View {
         let isSelected = store.selectedEventID == e.id
         return Button { store.calSelect(e.id) } label: {
             EventBlockView(title: title, detail: f.height >= 34 ? detail : nil, kind: e.kind, isSelected: isSelected)
-                // EventBlockView clips its own ring, so draw it here: ink edge plus the 3pt accent ring.
-                .overlay(isSelected ? Rectangle().strokeBorder(Color.btInk, lineWidth: 1.5) : nil)
-                .overlay(isSelected ? Rectangle().stroke(Color.btAccent, lineWidth: 3).padding(-1.5) : nil)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

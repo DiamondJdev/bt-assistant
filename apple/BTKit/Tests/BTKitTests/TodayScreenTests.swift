@@ -47,15 +47,40 @@ struct TodayScreenTests {
         #expect(summary.percentOfGoal == 80)
     }
 
+    /// The mockup's day: no study block at 2:55 yet.
+    func mockupStore() -> AppStore {
+        let store = makeStore()
+        store.deleteEvent("hw6")
+        return store
+    }
+
+    @Test func slotIsTenMinutesAfterNextClass() {
+        let slot = mockupStore().todayBookingSlot
+        #expect(slot.map { TodayFormat.clock($0.start, Calendar.bt) } == "2:55")
+    }
+
+    @Test func slotSkipsBusyTimeAndThePast() throws {
+        let store = makeStore()
+        let slot = try #require(store.todayBookingSlot)
+        #expect(slot.start >= store.now)
+        let busy = store.events(on: store.now).filter { $0.kind != .deadline && $0.kind != .focusLogged }
+        #expect(!busy.contains { $0.start < slot.end && slot.start < $0.end })
+    }
+
+    @Test func noSlotLateAtNight() {
+        let late = Calendar.bt.date(bySettingHour: 22, minute: 30, second: 0, of: Self.thursday)!
+        #expect(AppStore(clock: { late }).todayBookingSlot == nil)
+    }
+
     @Test func proposalCountsMinutesToNextClass() {
-        let text = makeStore().todayProposal.map(\.text).joined()
+        let text = mockupStore().todayProposal.map(\.text).joined()
         #expect(text.hasPrefix("You have 44 minutes before Discrete Math."))
         #expect(text.contains("stop at 1:20"))
         #expect(text.hasSuffix("session 3 at 2:55."))
     }
 
     @Test func bookAddsBlockToAgendaAndUndoRemovesIt() throws {
-        let store = makeStore()
+        let store = mockupStore()
         let count = store.events.count
         store.bookTodaySession()
         let booked = try #require(store.todayBookedEvent)
