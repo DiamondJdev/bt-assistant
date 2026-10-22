@@ -33,5 +33,7 @@ Keep this section updated with mistakes you've made or behaviors that future age
 - `swift test --package-path apple/BTKit` failing in CodeSign with "resource fork, Finder information, or similar detritus not allowed": macOS keeps adding a FinderInfo xattr under `~/Documents`. Build outside it: add `--scratch-path /tmp/btkit-build`.
 - EventKit gives an occurrence a new `calendarItemIdentifier` when it's edited alone (`.thisEvent`) and gives later occurrences a new one after a `.futureEvents` split. Find events again by identifier plus occurrence date after every save; never keep identifiers across edits.
 - `uv sync` may pick Python 3.15, which `ctranslate2` has no wheels for. Use `uv sync --python 3.14`.
+- Claude Code agent worktrees branch from `main`, not the current branch. Reset a fresh worktree onto the intended base before building on it.
+- Checking SwiftUI screens offscreen with `ImageRenderer` leaves `ScrollView`s blank and draws `TextField`s as yellow boxes. Check those in the running app.
 
 Keep this section short. Add concrete mistakes and their fixes as they occur; never include secrets or private transcripts.
