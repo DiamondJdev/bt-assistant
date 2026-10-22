@@ -120,7 +120,7 @@ struct BTScreenTests {
         let insight = try #require(send("@code how am I doing", store).insight)
         #expect(insight.value == "3h 12m")
         #expect(insight.link == .code(projectID: nil))
-        #expect(store.ledger.count == SampleData.btLedger(now: Self.thursday).count)
+        #expect(store.ledger.count == SampleData(now: Self.thursday).ledger.count)
     }
 
     @Test func insightIsScopedToThreadProject() throws {

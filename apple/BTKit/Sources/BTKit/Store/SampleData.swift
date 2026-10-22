@@ -34,7 +34,7 @@ public struct SampleData {
         memories = SampleData.btMemories(now: now)
         todos = SampleData.btTodos(now: now)
         threads = SampleData.btThreads(now: now)
-        ledger = SampleData.btLedger(now: now)
+        ledger = SampleData.btLedger(now: now, events: events, projects: projects)
     }
 
     /// The week from CalWeek.dc.html. Index 3 (Thursday) in the mockup is "today"; here today is real.

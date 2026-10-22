@@ -55,38 +55,23 @@ extension SampleData {
 
     /// Undo tokens point at real sample data. The prototype's sixth entry ("Set 4 × 25 cycle",
     /// kind FOCUS) is left out: `ResultKind` has no focus case.
-    static func btLedger(now: Date) -> [LedgerEntry] {
+    static func btLedger(now: Date, events: [CalendarEvent], projects: [Project]) -> [LedgerEntry] {
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
-        return [
-            LedgerEntry(id: "l4", time: ago(1), kind: .status, summary: "DST recurrence → Merged",
-                        undo: .restoreStage(projectID: "bt-client", stage: btClientStage3), resultCardID: "c4"),
+        let stage3 = projects.first { $0.id == "bt-client" }?.stages.first { $0.id == "s3" }
+        let hw6 = events.first { $0.id == "hw6" }
+        let entries: [LedgerEntry?] = [
+            stage3.map { LedgerEntry(id: "l4", time: ago(1), kind: .status, summary: "DST recurrence → Merged",
+                                     undo: .restoreStage(projectID: "bt-client", stage: $0), resultCardID: "c4") },
             LedgerEntry(id: "l3", time: ago(1), kind: .todo, summary: "Answer sync conflict question",
                         undo: .removeTodo(id: "todo-sync"), resultCardID: "c3"),
             LedgerEntry(id: "l2", time: ago(4), kind: .memory, summary: "TA office hours · Fri 10–11",
                         undo: .removeMemory(id: "mem-ta"), resultCardID: "c2"),
-            LedgerEntry(id: "l1", time: ago(4), kind: .calendar, summary: "HW 6 block moved to 5:15",
-                        undo: .restoreEvent(hw6Original(now: now)), resultCardID: "c1"),
+            hw6.map { LedgerEntry(id: "l1", time: ago(4), kind: .calendar, summary: "HW 6 block moved to 5:15",
+                                  undo: .restoreEvent($0), resultCardID: "c1") },
             LedgerEntry(id: "l0", time: ago(228), kind: .calendar, summary: "Added bt-client deep work, Fri 1–3",
                         undo: .removeEvent(id: "f2")),
         ]
+        return entries.compactMap { $0 }
     }
 
-    /// bt-client stage 3 as `SampleData.projects` builds it.
-    static let btClientStage3 = RoadmapStage(id: "s3", index: 3, name: "Calendar sync", status: .current, progress: 0.7, tasks: [
-        RoadmapTask(id: "t1", title: "EventKit adapter", status: .done),
-        RoadmapTask(id: "t2", title: "Focus writes to calendar", status: .done),
-        RoadmapTask(id: "t3", title: "DST recurrence", status: .inReview),
-        RoadmapTask(id: "t4", title: "Sync conflict UI", status: .needsYou),
-    ])
-
-    /// The "hw6" sample block at 2:55 today, computed the way `SampleData.weekEvents` does.
-    static func hw6Original(now: Date, calendar: Calendar = .bt) -> CalendarEvent {
-        let week = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
-        let day = calendar.dateComponents([.day], from: week, to: calendar.startOfDay(for: now)).day ?? 3
-        let at = { (hour: Double) in
-            calendar.date(byAdding: .minute, value: Int(((Double(day * 24) + hour) * 60).rounded()), to: week)!
-        }
-        return CalendarEvent(id: "hw6", title: "Discrete HW 6 — problems 4–8", start: at(14.92), end: at(15.75),
-                             kind: .studyPlanned, source: .bt, runAsFocus: true, focusPlan: "2×25")
-    }
 }
