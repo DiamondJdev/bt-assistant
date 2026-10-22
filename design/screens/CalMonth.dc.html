@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BT — Calendar Month</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#DCD0C2}
+a{color:#2E2218}a:hover{color:#B8431A}
+button,input{font-family:inherit}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 860px; display: flex; flex-direction: column; background: #E9DFD3; color: #2E2218; font-family: 'Inter Tight', ui-sans-serif, system-ui, sans-serif; font-size: 14px; overflow: auto">
+
+  <header style="flex-shrink: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; height: 52px; border-bottom: 1px dashed #B5A796; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; min-width: 1100px">
+    <div style="display: flex; align-items: center; gap: 18px; padding: 0 20px">
+      <div style="display: flex; gap: 8px">
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+      </div>
+      <span style="font-family: 'Inter Tight', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.32em">B T</span>
+    </div>
+    <nav aria-label="Modules" style="grid-column: span 2; display: flex; gap: 28px; padding: 0 20px">
+      <a href="Today.dc.html" style="color: #6B5C4C; text-decoration: none">Today</a>
+      <a href="Focus.dc.html" style="color: #6B5C4C; text-decoration: none">Focus</a>
+      <a href="Code.dc.html" style="color: #6B5C4C; text-decoration: none">Code</a>
+      <a href="CalWeek.dc.html" aria-current="page" style="color: #2E2218; text-decoration: none; border-bottom: 1.5px solid #2E2218; padding-bottom: 2px">Calendar</a>
+      <a href="BT.dc.html" style="color: #6B5C4C; text-decoration: none">BT</a>
+    </nav>
+    <div style="display: flex; justify-content: flex-end; padding: 0 20px; color: #6B5C4C">Apple · Google — synced 1m ago</div>
+  </header>
+
+  <main id="cal" style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 1100px">
+
+    <!-- Toolbar -->
+    <div style="grid-column: span 4; display: flex; align-items: center; gap: 20px; padding: 16px 20px; border-bottom: 1px dashed #B5A796; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 40px; font-weight: 500; letter-spacing: -0.045em; line-height: 1">October</h1>
+      <div role="group" aria-label="Layers" style="display: flex; gap: 6px; flex-wrap: wrap">
+        <sc-for list="{{layerBtns}}" as="b" hint-placeholder-count="4">
+          <button onClick="{{b.toggle}}" aria-pressed="{{b.pressed}}" style="height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid #2E2218; background: {{b.bg}}; color: {{b.fg}}; font-size: 12px; cursor: pointer">{{b.name}}</button>
+        </sc-for>
+      </div>
+      <span style="flex: 1"></span>
+      <div style="display: flex; gap: 6px">
+        <span style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #2E2218; background: #2E2218; color: #F4EDE4; font-size: 13px; display: flex; align-items: center">Oct 2026</span>
+      </div>
+      <nav aria-label="View" style="display: flex; border: 1px solid #2E2218; border-radius: 999px; overflow: hidden">
+        <a href="CalDay.dc.html" style="height: 36px; padding: 0 16px; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Day</a>
+        <a href="CalWeek.dc.html" style="height: 36px; padding: 0 16px; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Week</a>
+        <a href="CalMonth.dc.html" aria-current="page" style="height: 36px; padding: 0 16px; background: #2E2218; color: #F4EDE4; font-size: 13px; display: flex; align-items: center; text-decoration: none">Month</a>
+      </nav>
+      <a href="CalWeek.dc.html" style="height: 36px; padding: 0 18px; border-radius: 999px; background: #D9531E; color: #1F120A; font-size: 13px; font-weight: 600; display: flex; align-items: center; text-decoration: none">+ New event</a>
+    </div>
+
+    <!-- Month grid -->
+    <section aria-label="October 2026" style="grid-column: span 3; display: flex; flex-direction: column; min-height: 0; border-right: 1px dashed #B5A796">
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C; border-bottom: 1px dashed #B5A796">
+        <span style="padding: 8px 12px">Mon</span><span style="padding: 8px 12px">Tue</span><span style="padding: 8px 12px">Wed</span><span style="padding: 8px 12px">Thu</span><span style="padding: 8px 12px">Fri</span><span style="padding: 8px 12px">Sat</span><span style="padding: 8px 12px">Sun</span>
+      </div>
+      <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(0, 1fr))">
+        <sc-for list="{{cells}}" as="c" hint-placeholder-count="35">
+          <button onClick="{{c.pick}}" aria-label="{{c.label}}" aria-pressed="{{c.pressed}}" style="display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border: 0; border-right: 1px dashed #CDBFAE; border-bottom: 1px dashed #CDBFAE; background: {{c.bg}}; box-shadow: {{c.sh}}; color: #2E2218; text-align: left; overflow: hidden; cursor: pointer; min-height: 0">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%">
+              <span style="min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{c.nbg}}; color: {{c.nfg}}; font-size: 18px; font-weight: 500; letter-spacing: -0.03em">{{c.n}}</span>
+              <sc-if value="{{c.hasDue}}" hint-placeholder-val="{{ false }}">
+                <span style="padding: 2px 6px; background: #D9531E; color: #1F120A; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.due}}</span>
+              </sc-if>
+            </div>
+            <span aria-hidden="true" style="height: 3px; width: 100%; background: #DCCFBF; display: flex"><span style="width: {{c.load}}%; background: {{c.loadc}}"></span></span>
+            <sc-for list="{{c.items}}" as="it" hint-placeholder-count="2">
+              <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: {{c.fg}}; white-space: nowrap; overflow: hidden; width: 100%"><span style="flex-shrink: 0; width: 7px; height: 7px; background: {{it.bg}}; border: {{it.bd}}; box-sizing: border-box"></span>{{it.t}}</span>
+            </sc-for>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Side panel -->
+    <aside aria-label="Selected day and month summary" style="display: flex; flex-direction: column; gap: 24px; padding: 20px; overflow: auto">
+      <section aria-label="Selected day" style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>{{selLabel}}</span><a href="{{selHref}}" style="color: #2E2218">{{selLink}}</a></div>
+        <div style="display: flex; flex-direction: column">
+          <sc-for list="{{selItems}}" as="s" hint-placeholder-count="4">
+            <div style="display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #D6C9B9">
+              <span style="width: 9px; height: 9px; background: {{s.bg}}; border: {{s.bd}}; box-sizing: border-box"></span>
+              <span style="font-weight: {{s.fw}}; color: {{s.c}}">{{s.t}}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{selEmpty}}" hint-placeholder-val="{{ false }}">
+            <span style="padding: 8px 0; color: #6B5C4C">Nothing on this day with the current layers.</span>
+          </sc-if>
+        </div>
+      </section>
+
+      <section aria-label="October study" style="display: flex; flex-direction: column; gap: 12px; padding-top: 20px; border-top: 1px dashed #B5A796">
+        <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>Study this month</span><span>Goal 40h</span></div>
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <span style="font-size: 52px; font-weight: 500; letter-spacing: -0.045em; line-height: 0.9">26h</span>
+          <span style="color: #6B5C4C">logged · {{bookedH}}h booked ahead</span>
+        </div>
+        <div role="img" aria-label="26 hours logged, {{bookedH}} booked, of 40" style="display: flex; gap: 3px; height: 18px">
+          <sc-for list="{{ticks}}" as="t" hint-placeholder-count="40">
+            <span style="flex: 1; background: {{t.c}}; border: {{t.bd}}; box-sizing: border-box"></span>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-label="BT" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1.5px dashed #D9531E; background: rgba(217,83,30,0.06); margin-top: auto">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8A3412">BT · looking ahead</span>
+        <sc-if value="{{notDrafted}}" hint-placeholder-val="{{ true }}">
+          <p style="margin: 0; font-size: 19px; font-weight: 500; line-height: 1.25; letter-spacing: -0.015em">Oct 26–30 has 2 deadlines and 1 study block. <span style="color: #8A3412">I can draft 4 more around your shifts.</span></p>
+          <div style="display: flex; gap: 8px">
+            <button onClick="{{draft}}" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 0; background: #2E2218; color: #F4EDE4; font-size: 13px; cursor: pointer">Draft blocks</button>
+            <button onClick="{{showWeek}}" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 13px; cursor: pointer">Show me first</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{drafted}}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font-size: 19px; font-weight: 500; line-height: 1.25; letter-spacing: -0.015em">Drafted 4 blocks for Oct 26–30. <span style="color: #8A3412">They’re dashed orange until you keep them.</span></p>
+          <div style="display: flex; gap: 8px">
+            <a href="CalWeek.dc.html" style="height: 36px; padding: 0 16px; border-radius: 999px; background: #2E2218; color: #F4EDE4; font-size: 13px; display: flex; align-items: center; text-decoration: none">Review in Week</a>
+            <button onClick="{{undraft}}" style="height: 36px; padding: 0 10px; border: 0; background: transparent; color: #2E2218; font-size: 13px; text-decoration: underline; cursor: pointer">Undo</button>
+          </div>
+        </sc-if>
+      </section>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  g(k, d) { return this.state && this.state[k] !== undefined ? this.state[k] : d; }
+  renderVals() {
+    const selN = this.g('sel', 22);
+    const drafted = this.g('drafted', false);
+    const L = this.g('layers', { study: true, due: true, cls: true, work: false });
+    const M = {
+      cls: { bg: '#DCCFBF', bd: '1px solid #8C7E70', layer: 'cls' },
+      work: { bg: 'transparent', bd: '1px solid #8C7E70', layer: 'work' },
+      done: { bg: '#2E2218', bd: '0', layer: 'study' },
+      plan: { bg: 'transparent', bd: '1.5px dashed #2E2218', layer: 'study' },
+      bt: { bg: 'transparent', bd: '1.5px dashed #D9531E', layer: 'study' }
+    };
+    const byDow = [
+      [{ t: 'GEOL · CHEM', k: 'cls' }], [{ t: 'HIST · Discrete', k: 'cls' }], [{ t: 'Work 6–12', k: 'work' }, { t: 'McMillion 3:15', k: 'cls' }],
+      [{ t: 'GEOL · HIST · Disc.', k: 'cls' }], [{ t: 'HIST', k: 'cls' }], [{ t: 'Work shift', k: 'work' }], [{ t: 'Work shift', k: 'work' }]
+    ];
+    const due = { 8: 'HW 4', 15: 'HW 5', 16: 'CHEM lab', 22: 'HW 6', 23: 'CHEM lab', 25: 'HIST', 29: 'HW 7', 30: 'CHEM lab' };
+    const studyDone = { 1: '1h 40', 2: '2h', 5: '2h 30', 6: '1h', 7: '1h 15', 9: '3h', 12: '2h', 13: '1h 30', 14: '2h', 15: '2h 15', 19: '1h 40', 20: '1h 15', 21: '0h 50' };
+    const studyPlan = { 22: 'HW 6 · 50m', 23: 'bt-client 2h', 25: 'HIST 1h', 27: 'Discrete 1h' };
+    const btDraft = drafted ? { 26: 'HW 7 · 1h', 28: 'CHEM lab · 1h', 29: 'bt-client 2h', 30: 'Review · 45m' } : {};
+    const cells = [];
+    let selInfo = null;
+    for (let i = 0; i < 35; i++) {
+      const dow = i % 7;
+      let n, other = false;
+      if (i < 3) { n = 28 + i; other = true; } else if (i - 2 > 31) { n = i - 33; other = true; } else n = i - 2;
+      const today = !other && n === 22, isSel = !other && n === selN;
+      const all = [];
+      if (!other) {
+        byDow[dow].forEach(x => all.push(Object.assign({ t: x.t }, M[x.k])));
+        if (studyDone[n]) all.push(Object.assign({ t: 'Focus ' + studyDone[n] }, M.done));
+        if (studyPlan[n]) all.push(Object.assign({ t: studyPlan[n] }, M.plan));
+        if (btDraft[n]) all.push(Object.assign({ t: 'BT · ' + btDraft[n] }, M.bt));
+      }
+      const items = all.filter(x => L[x.layer]);
+      const d = !other && L.due && due[n] ? due[n] : '';
+      const load = other ? 0 : (dow >= 5 ? 70 : (dow === 2 ? 55 : 40 + (studyDone[n] ? 20 : 0) + (studyPlan[n] || btDraft[n] ? 15 : 0)));
+      if (isSel) selInfo = { n, dow, items, due: d };
+      cells.push({
+        n, items: items.slice(0, 3), due: d, hasDue: !!d,
+        label: other ? 'Outside October' : 'October ' + n, pressed: isSel ? 'true' : 'false',
+        bg: isSel ? 'rgba(217,83,30,0.10)' : (today ? 'rgba(217,83,30,0.05)' : (other ? '#E2D7CA' : 'transparent')),
+        sh: isSel ? 'inset 0 0 0 1.5px #D9531E' : 'none',
+        nbg: today ? '#D9531E' : 'transparent', nfg: today ? '#1F120A' : (other ? '#8C7E70' : '#2E2218'),
+        fg: n < 22 && !other ? '#6B5C4C' : '#2E2218',
+        load, loadc: n < 22 ? '#8C7E70' : '#2E2218',
+        pick: () => { if (!other) this.setState({ sel: n }); }
+      });
+    }
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const selItems = (selInfo ? selInfo.items : []).map(x => ({ t: x.t, bg: x.bg, bd: x.bd, fw: '500', c: '#2E2218' }));
+    if (selInfo && selInfo.due) selItems.push({ t: selInfo.due + ' due · 11:59', bg: '#D9531E', bd: '0', fw: '600', c: '#8A3412' });
+    const booked = 9 + (drafted ? 4.75 : 0);
+    const ticks = [];
+    for (let i = 0; i < 40; i++) ticks.push(i < 26 ? { c: '#2E2218', bd: '0' } : (i < 26 + Math.round(booked) ? { c: 'transparent', bd: '1px dashed #2E2218' } : { c: '#CDBFAE', bd: '0' }));
+    const defs = [['study', 'Study'], ['due', 'Due'], ['cls', 'Class'], ['work', 'Work']];
+    const layerBtns = defs.map(([k, name]) => ({
+      name, pressed: L[k] ? 'true' : 'false', bg: L[k] ? '#2E2218' : 'transparent', fg: L[k] ? '#F4EDE4' : '#2E2218',
+      toggle: () => { const nl = Object.assign({}, L); nl[k] = !nl[k]; this.setState({ layers: nl }); }
+    }));
+    return {
+      cells, ticks, layerBtns, selItems, selEmpty: selItems.length === 0,
+      selLabel: selInfo ? dayNames[selInfo.dow] + ' ' + selInfo.n + (selInfo.n === 22 ? ' · today' : '') : '',
+      selHref: selN === 22 ? 'CalDay.dc.html' : 'CalWeek.dc.html',
+      selLink: selN === 22 ? 'Open day →' : 'Open week →',
+      bookedH: booked % 1 ? booked.toFixed(2).replace(/0$/, '') : booked,
+      drafted, notDrafted: !drafted,
+      draft: () => this.setState({ drafted: true, layers: Object.assign({}, L, { study: true }) }),
+      undraft: () => this.setState({ drafted: false }),
+      showWeek: () => this.setState({ drafted: true, sel: 28 })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -27,7 +27,7 @@ final class PomodoroClock {
 struct PomodoroMenuBarLabel: View {
     let pomodoro: PomodoroModule
     let clock: PomodoroClock
-    let sidebar: ToolSidebarModel
+    let store: AppStore
     let hotkey: GlobalHotkey
     @Environment(\.openWindow) private var openWindow
 
@@ -52,7 +52,7 @@ struct PomodoroMenuBarLabel: View {
         if NSApp.isActive && mainWindowVisible {
             NSApp.hide(nil)
         } else {
-            sidebar.selectedModuleID = "calendar"
+            store.route = .calendar
             openWindow(id: "main")
             NSApp.activate()
         }

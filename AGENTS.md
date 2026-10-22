@@ -4,7 +4,7 @@ BT is a local-first personal assistant. The Python/FastAPI hub handles Ollama ch
 
 See `README.md` for setup and `docs/DESIGN.md` for design context.
 
-This is a monorepo. The Python backend lives in `server/`; run `uv` and test commands from there. `apple/BTKit/` holds the shared Swift package and tool sidebar; `apple/BTMac/` is the thin macOS app target in `apple/BT.xcodeproj`. Run package tests with `swift test --package-path apple/BTKit` from the repository root. `editors/vscode/` is the VS Code heartbeat extension for the Coding module (plain JavaScript, no dependencies); test it with `node --test editors/vscode`. Remaining phases are planned in `docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md`.
+This is a monorepo. The Python backend lives in `server/`; run `uv` and test commands from there. `apple/BTKit/` holds the shared Swift package and tool sidebar; `apple/BTMac/` is the thin macOS app target in `apple/BT.xcodeproj`. Run package tests with `swift test --package-path apple/BTKit` from the repository root. `editors/vscode/` is the VS Code heartbeat extension for the Coding module (plain JavaScript, no dependencies); test it with `node --test editors/vscode`. The Mac UI follows the "Sand Grid" spec in `design/HANDOFF.md` (mockups in `design/screens/`): tokens and shared components live in `apple/BTKit/Sources/BTKit/Design/`, the shared `AppStore` in `Store/`, and one folder per screen in `Screens/`. Remaining phases are planned in `docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md`.
 
 ## Module overview
 

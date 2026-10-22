@@ -11,7 +11,7 @@ struct BTMacApp: App {
     private let container: ModelContainer
     @State private var pomodoro: PomodoroModule
     @State private var clock: PomodoroClock
-    @State private var sidebar: ToolSidebarModel
+    @State private var store: AppStore
     @State private var hotkey = GlobalHotkey()
 
     init() {
@@ -20,28 +20,29 @@ struct BTMacApp: App {
         } catch {
             fatalError("Could not open the BT data store: \(error)")
         }
-        let pomodoro = PomodoroModule(modelContext: container.mainContext, nowPlaying: MusicController())
+        let music = MusicController()
+        let pomodoro = PomodoroModule(modelContext: container.mainContext, nowPlaying: music)
         _pomodoro = State(initialValue: pomodoro)
         _clock = State(initialValue: PomodoroClock(pomodoro: pomodoro))
         let coding = CodingModule(modelContext: container.mainContext)
         coding.startWatching()
         let chat = ChatModel()
-        let sidebar = ToolSidebarModel(modules: [BTModule(chat: chat), pomodoro, CalendarModule(), coding])
-        chat.modules = sidebar.modules
-        _sidebar = State(initialValue: sidebar)
+        // The new screens read AppStore; these modules still serve BT's tool calls and the menu bar.
+        chat.modules = [BTModule(chat: chat), pomodoro, CalendarModule(), coding]
+        _store = State(initialValue: AppStore(nowPlaying: music))
     }
 
     var body: some Scene {
         Window("BT", id: "main") {
-            ToolSidebar(model: sidebar)
-                .frame(minWidth: 640, minHeight: 400)
+            BTAppView(store: store)
         }
-        .defaultSize(width: 960, height: 640)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1440, height: 900)
 
         MenuBarExtra {
             PomodoroMenu(pomodoro: pomodoro)
         } label: {
-            PomodoroMenuBarLabel(pomodoro: pomodoro, clock: clock, sidebar: sidebar, hotkey: hotkey)
+            PomodoroMenuBarLabel(pomodoro: pomodoro, clock: clock, store: store, hotkey: hotkey)
         }
 
         Settings {

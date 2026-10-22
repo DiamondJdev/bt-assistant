@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BT — Calendar Week</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#DCD0C2}
+a{color:#2E2218}a:hover{color:#B8431A}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 860px; display: flex; flex-direction: column; background: #E9DFD3; color: #2E2218; font-family: 'Inter Tight', ui-sans-serif, system-ui, sans-serif; font-size: 14px; overflow: auto">
+
+  <header style="flex-shrink: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; height: 52px; border-bottom: 1px dashed #B5A796; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; min-width: 1100px">
+    <div style="display: flex; align-items: center; gap: 18px; padding: 0 20px">
+      <div style="display: flex; gap: 8px">
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+      </div>
+      <span style="font-family: 'Inter Tight', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.32em">B T</span>
+    </div>
+    <nav aria-label="Modules" style="grid-column: span 2; display: flex; gap: 28px; padding: 0 20px">
+      <a href="Today.dc.html" style="color: #6B5C4C; text-decoration: none">Today</a>
+      <a href="Focus.dc.html" style="color: #6B5C4C; text-decoration: none">Focus</a>
+      <a href="Code.dc.html" style="color: #6B5C4C; text-decoration: none">Code</a>
+      <a href="CalWeek.dc.html" aria-current="page" style="color: #2E2218; text-decoration: none; border-bottom: 1.5px solid #2E2218; padding-bottom: 2px">Calendar</a>
+      <a href="BT.dc.html" style="color: #6B5C4C; text-decoration: none">BT</a>
+    </nav>
+    <div style="display: flex; justify-content: flex-end; padding: 0 20px; color: #6B5C4C">Apple · Google — synced 1m ago</div>
+  </header>
+
+  <main id="cal" style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 1100px">
+
+    <!-- Toolbar -->
+    <div style="grid-column: span 4; display: flex; align-items: center; gap: 20px; padding: 16px 20px; border-bottom: 1px dashed #B5A796; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 40px; font-weight: 500; letter-spacing: -0.045em; line-height: 1">{{weekLabel}}</h1>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">{{weekMeta}}</span>
+      <span style="flex: 1"></span>
+      <div style="display: flex; gap: 6px">
+        <button onClick="{{prevWeek}}" aria-label="Previous week" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #2E2218; background: transparent; color: #2E2218; cursor: pointer">‹</button>
+        <button onClick="{{thisWeek}}" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 13px; cursor: pointer">Today</button>
+        <button onClick="{{nextWeek}}" aria-label="Next week" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #2E2218; background: transparent; color: #2E2218; cursor: pointer">›</button>
+      </div>
+      <nav aria-label="View" style="display: flex; border: 1px solid #2E2218; border-radius: 999px; overflow: hidden">
+        <a href="CalDay.dc.html" style="height: 36px; padding: 0 16px; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Day</a>
+        <a href="CalWeek.dc.html" aria-current="page" style="height: 36px; padding: 0 16px; background: #2E2218; color: #F4EDE4; font-size: 13px; display: flex; align-items: center; text-decoration: none">Week</a>
+        <a href="CalMonth.dc.html" style="height: 36px; padding: 0 16px; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Month</a>
+      </nav>
+      <button onClick="{{newEvent}}" style="height: 36px; padding: 0 18px; border-radius: 999px; border: 0; background: #D9531E; color: #1F120A; font-size: 13px; font-weight: 600; cursor: pointer">+ New event</button>
+    </div>
+
+    <!-- Sidebar -->
+    <aside aria-label="Calendars and deadlines" style="display: flex; flex-direction: column; gap: 22px; padding: 20px; border-right: 1px dashed #B5A796; overflow: auto">
+      <section aria-label="October 2026" style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>October 2026</span><a href="CalMonth.dc.html" style="color: #2E2218">Month →</a></div>
+        <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; font-family: 'Geist Mono', monospace; font-size: 11px; text-align: center">
+          <span style="color: #6B5C4C">M</span><span style="color: #6B5C4C">T</span><span style="color: #6B5C4C">W</span><span style="color: #6B5C4C">T</span><span style="color: #6B5C4C">F</span><span style="color: #6B5C4C">S</span><span style="color: #6B5C4C">S</span>
+          <sc-for list="{{mini}}" as="d" hint-placeholder-count="35">
+            <span style="height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: {{d.bg}}; color: {{d.fg}}">{{d.n}}</span>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-label="Calendars" style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">Calendars</span>
+        <sc-for list="{{layers}}" as="ly" hint-placeholder-count="5">
+          <label style="display: flex; gap: 10px; align-items: center; cursor: pointer"><input type="checkbox" checked="{{ly.on}}" onChange="{{ly.toggle}}" style="accent-color: #2E2218; width: 16px; height: 16px"><span style="width: 10px; height: 10px; background: {{ly.bg}}; border: {{ly.bd}}; box-sizing: border-box"></span><span style="flex: 1">{{ly.name}}</span><span style="font-family: 'Geist Mono', monospace; font-size: 10px; color: #6B5C4C">{{ly.src}}</span></label>
+        </sc-for>
+      </section>
+
+      <section aria-label="Due this week" style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">Due this week</span>
+        <a href="CalDay.dc.html" style="display: flex; justify-content: space-between; align-items: baseline; text-decoration: none"><span style="font-weight: 500">Discrete HW 6</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #B8431A">11h</span></a>
+        <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-weight: 500">CHEM lab report</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6B5C4C">Fri</span></div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-weight: 500">HIST response</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6B5C4C">Sun</span></div>
+      </section>
+    </aside>
+
+    <!-- Week grid -->
+    <section aria-label="Week grid" style="grid-column: span 3; display: flex; flex-direction: column; min-height: 0; padding: 14px 20px 16px; gap: 8px; position: relative">
+      <div style="display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); gap: 6px">
+        <span></span>
+        <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+          <div style="display: flex; align-items: baseline; gap: 6px; padding: 0 4px; color: {{d.hc}}">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase">{{d.name}}</span>
+            <span style="font-size: 22px; font-weight: 500; letter-spacing: -0.03em">{{d.date}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); gap: 6px; min-height: 24px">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 10px; color: #6B5C4C; align-self: center">DUE</span>
+        <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <sc-for list="{{d.due}}" as="x" hint-placeholder-count="0">
+              <a href="CalDay.dc.html" style="height: 22px; padding: 0 6px; background: #D9531E; color: #1F120A; font-size: 11px; font-weight: 600; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-decoration: none">{{x}}</a>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); gap: 6px; position: relative">
+        <div style="display: flex; flex-direction: column; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 10px; color: #6B5C4C"><span>8a</span><span>10a</span><span>12p</span><span>2p</span><span>4p</span><span>6p</span><span>8p</span><span>10p</span></div>
+        <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+          <div style="position: relative; border-left: 1px dashed #CDBFAE; background: {{d.colbg}}">
+            <sc-for list="{{d.events}}" as="e" hint-placeholder-count="3">
+              <button onClick="{{e.pick}}" aria-pressed="{{e.pressed}}" style="position: absolute; left: 3px; right: 3px; top: {{e.top}}%; height: {{e.h}}%; background: {{e.bg}}; color: {{e.fg}}; border: {{e.bd}}; box-shadow: {{e.sh}}; box-sizing: border-box; padding: 4px 6px; display: flex; flex-direction: column; gap: 1px; text-align: left; overflow: hidden; font-size: 11px; cursor: pointer">
+                <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%">{{e.t}}</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10px; opacity: 0.8; white-space: nowrap">{{e.s}}</span>
+              </button>
+            </sc-for>
+            <sc-if value="{{d.today}}" hint-placeholder-val="{{ false }}">
+              <span style="position: absolute; left: -4px; right: 0; top: 34.05%; height: 2px; background: #D9531E; pointer-events: none"></span>
+              <span style="position: absolute; left: -7px; top: calc(34.05% - 4px); width: 9px; height: 9px; border-radius: 50%; background: #D9531E; pointer-events: none"></span>
+            </sc-if>
+          </div>
+        </sc-for>
+
+        <!-- Edit popover -->
+        <sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+          <div role="dialog" aria-label="Edit event" style="position: absolute; left: {{popLeft}}; top: {{popTop}}%; width: 300px; display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #F4EDE4; border: 1px solid #2E2218; box-shadow: 8px 8px 0 rgba(46,34,24,0.12); z-index: 2">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>Edit · {{sel.kindLabel}}</span><button onClick="{{closeSel}}" aria-label="Close" style="width: 28px; height: 28px; border: 0; background: transparent; color: #2E2218; font-size: 18px; cursor: pointer">×</button></div>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #6B5C4C">Title
+              <input type="text" value="{{sel.t}}" onChange="{{onTitle}}" style="height: 34px; border: 0; border-bottom: 1.5px solid #2E2218; background: transparent; color: #2E2218; font-size: 16px; font-weight: 500; outline: none">
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+              <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #6B5C4C">When
+                <span style="height: 32px; border: 1px solid #B5A796; background: #FFFFFF; padding: 0 8px; color: #2E2218; font-size: 13px; display: flex; align-items: center">{{sel.dayName}} {{sel.range}}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #6B5C4C">Nudge
+                <div style="display: flex; gap: 4px">
+                  <button onClick="{{earlier}}" style="flex: 1; height: 32px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 12px; cursor: pointer">−30</button>
+                  <button onClick="{{later}}" style="flex: 1; height: 32px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 12px; cursor: pointer">+30</button>
+                </div>
+              </div>
+            </div>
+            <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; cursor: pointer">
+              <span>Run as Focus session <span style="color: #6B5C4C">· 50 / 10</span></span>
+              <input type="checkbox" checked="{{sel.focusOn}}" onChange="{{toggleFocus}}" style="accent-color: #D9531E; width: 18px; height: 18px">
+            </label>
+            <div style="display: flex; gap: 8px; align-items: center">
+              <button onClick="{{closeSel}}" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 0; background: #2E2218; color: #F4EDE4; font-size: 13px; font-weight: 500; cursor: pointer">Save</button>
+              <a href="Focus.dc.html" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #2E2218; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Start focus now</a>
+              <span style="flex: 1"></span>
+              <button onClick="{{deleteSel}}" style="height: 36px; padding: 0 4px; border: 0; background: transparent; color: #8A3412; font-size: 13px; text-decoration: underline; cursor: pointer">Delete</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- BT bar -->
+      <div style="display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px dashed #D9531E; background: rgba(217,83,30,0.06); flex-wrap: wrap; min-height: 34px">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #8A3412">BT</span>
+        <span style="flex: 1; min-width: 260px; font-size: 15px; font-weight: 500">{{btText}}</span>
+        <sc-if value="{{draftPending}}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{keepDraft}}" style="height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: #2E2218; color: #F4EDE4; font-size: 13px; cursor: pointer">Keep it</button>
+          <button onClick="{{moveDraft}}" style="height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 13px; cursor: pointer">Move later</button>
+          <button onClick="{{discardDraft}}" style="height: 34px; padding: 0 10px; border: 0; background: transparent; color: #2E2218; font-size: 13px; text-decoration: underline; cursor: pointer">Discard</button>
+        </sc-if>
+        <sc-if value="{{draftResolved}}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{resetDraft}}" style="height: 34px; padding: 0 10px; border: 0; background: transparent; color: #2E2218; font-size: 13px; text-decoration: underline; cursor: pointer">Undo</button>
+          <a href="BT.dc.html" style="height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid #2E2218; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Ask BT something else</a>
+        </sc-if>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  g(k, d) { return this.state && this.state[k] !== undefined ? this.state[k] : d; }
+  renderVals() {
+    const H0 = 8, SPAN = 14;
+    const week = this.g('week', 0);
+    const selId = this.g('sel', 'hw6');
+    const titles = this.g('titles', {}), shift = this.g('shift', {}), deleted = this.g('deleted', {}), focusOff = this.g('focusOff', {});
+    const extra = this.g('extra', []);
+    const draft = this.g('draft', 'pending');
+    const layerOn = this.g('layers', { cls: true, plan: true, done: true, due: true, work: true });
+    const K = {
+      cls:  { bg: '#DCCFBF', fg: '#2E2218', bd: '0', layer: 'cls', label: 'Class' },
+      work: { bg: '#E9DFD3', fg: '#2E2218', bd: '1px solid #8C7E70', layer: 'work', label: 'Work' },
+      done: { bg: '#2E2218', fg: '#F4EDE4', bd: '0', layer: 'done', label: 'Focus logged' },
+      plan: { bg: '#F4EDE4', fg: '#2E2218', bd: '1.5px dashed #2E2218', layer: 'plan', label: 'Study block' },
+      bt:   { bg: '#F7E4D8', fg: '#8A3412', bd: '1.5px dashed #D9531E', layer: 'plan', label: 'BT draft' }
+    };
+    const fmt = (h) => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60); const h12 = ((hh + 11) % 12) + 1; return h12 + ':' + (mm < 10 ? '0' : '') + mm; };
+    const base = [
+      [['m1', 'GEOL 11103', 9.5, 10.75, 'cls'], ['m2', 'CHEM 14103', 11, 12.25, 'cls'], ['m3', 'bt-client · 4×25', 14, 15.67, 'done']],
+      [['t1', 'HIST 20103', 11, 12.25, 'cls'], ['t2', 'Discrete Math', 13.5, 14.75, 'cls'], ['t3', 'Discrete HW · 3×25', 19, 20.5, 'done']],
+      [['w1', 'Work', 8, 12, 'work'], ['w2', 'McMillion', 15.25, 16.5, 'cls']],
+      [['h1', 'GEOL 11103', 9.5, 10.75, 'cls'], ['h2', 'HIST 20103', 11, 12.25, 'cls'], ['h3', 'Focus · now', 12.2, 13.12, 'done'], ['h4', 'Discrete Math', 13.5, 14.75, 'cls'], ['hw6', 'HW 6 — #4–8', 14.92, 15.75, 'plan'], ['h5', 'CHEM SI', 16, 17, 'cls'], ['draft', 'CHEM review', 17.5, 18.5, 'bt']],
+      [['f1', 'HIST 20103', 11, 12.25, 'cls'], ['f2', 'bt-client deep work', 13, 15, 'plan']],
+      [['s1', 'Work shift', 10, 18, 'work']],
+      [['u1', 'Work shift', 9, 17, 'work'], ['u2', 'HIST reading', 19, 20, 'plan']]
+    ];
+    extra.forEach(x => base[x.day].push([x.id, x.t, x.a, x.b, 'plan']));
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dates = week === 0 ? ['19', '20', '21', '22', '23', '24', '25'] : (week < 0 ? ['12', '13', '14', '15', '16', '17', '18'] : ['26', '27', '28', '29', '30', '31', '1']);
+    const dues = week === 0 ? [[], [], [], ['HW 6 · 11:59'], ['CHEM lab'], [], ['HIST resp.']] : [[], [], [], [], [], [], []];
+    let selected = null;
+    const days = names.map((name, di) => {
+      const events = [];
+      if (week === 0) base[di].forEach(r => {
+        const [id, t0, a0, b0, k0] = r;
+        if (deleted[id]) return;
+        if (id === 'draft' && draft === 'gone') return;
+        let k = k0;
+        if (id === 'draft' && draft === 'kept') k = 'plan';
+        const kk = K[k];
+        if (!layerOn[kk.layer]) return;
+        const off = (shift[id] || 0) + (id === 'draft' && draft === 'moved' ? 1 : 0);
+        const a = a0 + off, b = b0 + off;
+        const t = titles[id] !== undefined ? titles[id] : t0;
+        const isSel = id === selId;
+        const ev = {
+          id, t, s: fmt(a) + (k === 'bt' ? ' · BT draft' : ''),
+          top: (((a - H0) / SPAN) * 100).toFixed(2), h: (((b - a) / SPAN) * 100).toFixed(2),
+          bg: kk.bg, fg: kk.fg, bd: isSel ? '1.5px solid #2E2218' : kk.bd, sh: isSel ? '0 0 0 3px #D9531E' : 'none',
+          pressed: isSel ? 'true' : 'false',
+          pick: () => this.setState({ sel: id })
+        };
+        if (isSel) selected = { id, t, dayName: name, di, range: fmt(a) + '–' + fmt(b), top: ev.top, kindLabel: kk.label, focusOn: !focusOff[id] };
+        events.push(ev);
+      });
+      const today = week === 0 && di === 3;
+      return { name, date: dates[di], due: layerOn.due ? dues[di] : [], events, today, hc: today ? '#B8431A' : '#2E2218', colbg: today ? 'rgba(217,83,30,0.05)' : 'transparent' };
+    });
+    const mini = [];
+    for (let i = 0; i < 35; i++) {
+      let n, other = false;
+      if (i < 3) { n = 28 + i; other = true; } else if (i - 2 > 31) { n = i - 33; other = true; } else n = i - 2;
+      const lo = week === 0 ? 19 : (week < 0 ? 12 : 26), hi = lo + 6;
+      const today = !other && n === 22, inWeek = !other && n >= lo && n <= hi;
+      mini.push({ n, bg: today ? '#D9531E' : (inWeek ? '#DCCFBF' : 'transparent'), fg: today ? '#1F120A' : (other ? '#8C7E70' : '#2E2218') });
+    }
+    const layerDefs = [
+      ['cls', 'UARK classes', 'APPLE', '#DCCFBF', '1px solid #8C7E70'],
+      ['plan', 'Study blocks', 'BT', 'transparent', '1.5px dashed #2E2218'],
+      ['done', 'Focus logged', 'FOCUS', '#2E2218', '0'],
+      ['due', 'Blackboard due dates', 'GOOGLE', '#D9531E', '0'],
+      ['work', 'Work', 'GOOGLE', '#E9DFD3', '1px solid #8C7E70']
+    ];
+    const layers = layerDefs.map(([key, name, src, bg, bd]) => ({
+      name, src, bg, bd, on: !!layerOn[key],
+      toggle: () => { const n = Object.assign({}, layerOn); n[key] = !n[key]; this.setState({ layers: n }); }
+    }));
+    const btTexts = {
+      pending: 'Thursday evening is open after CHEM SI. I drafted CHEM review 5:30–6:30 so the lab report isn’t a Friday-morning scramble.',
+      kept: 'Kept. CHEM review is on Thursday 5:30–6:30, and Focus will run it as 2 × 25.',
+      moved: 'Moved to 6:30–7:30 so you get a real dinner break after SI.',
+      gone: 'Discarded. Want me to look for time on Friday instead?'
+    };
+    const nudge = (d) => { if (!selected) return; const n = Object.assign({}, shift); n[selected.id] = (n[selected.id] || 0) + d; this.setState({ shift: n }); };
+    const labels = { '-1': ['Oct 12 – 18', 'Week 8 · sample data covers week 9 only'], '0': ['Oct 19 – 25', 'Week 9 · 14h booked · 6h study'], '1': ['Oct 26 – Nov 1', 'Week 10 · sample data covers week 9 only'] };
+    const lab = labels[String(Math.max(-1, Math.min(1, week)))];
+    return {
+      days, mini, layers,
+      weekLabel: lab[0], weekMeta: lab[1],
+      prevWeek: () => this.setState({ week: Math.max(-1, week - 1), sel: null }),
+      nextWeek: () => this.setState({ week: Math.min(1, week + 1), sel: null }),
+      thisWeek: () => this.setState({ week: 0 }),
+      hasSel: !!selected,
+      sel: selected || { t: '', dayName: '', range: '', kindLabel: '', focusOn: false },
+      popLeft: selected && selected.di >= 4 ? 'calc(44px + 4px)' : 'calc(44px + (100% - 44px) * 0.5714 + 4px)',
+      popTop: selected ? Math.min(Number(selected.top), 44).toFixed(1) : 0,
+      closeSel: () => this.setState({ sel: null }),
+      onTitle: (e) => { if (!selected) return; const n = Object.assign({}, titles); n[selected.id] = e.target.value; this.setState({ titles: n }); },
+      earlier: () => nudge(-0.5), later: () => nudge(0.5),
+      toggleFocus: () => { if (!selected) return; const n = Object.assign({}, focusOff); n[selected.id] = !n[selected.id]; this.setState({ focusOff: n }); },
+      deleteSel: () => { if (!selected) return; const n = Object.assign({}, deleted); n[selected.id] = true; this.setState({ deleted: n, sel: null }); },
+      newEvent: () => {
+        const id = 'new' + (extra.length + 1);
+        const nTitles = Object.assign({}, titles); nTitles[id] = 'New event';
+        this.setState({ week: 0, extra: extra.concat([{ id, day: 4, t: 'New event', a: 19, b: 20 }]), titles: nTitles, sel: id });
+      },
+      btText: btTexts[draft],
+      draftPending: draft === 'pending', draftResolved: draft !== 'pending',
+      keepDraft: () => this.setState({ draft: 'kept' }),
+      moveDraft: () => this.setState({ draft: 'moved' }),
+      discardDraft: () => this.setState({ draft: 'gone', sel: selId === 'draft' ? null : selId }),
+      resetDraft: () => this.setState({ draft: 'pending' })
+    };
+  }
+}
+</script>
+</body>
+</html>

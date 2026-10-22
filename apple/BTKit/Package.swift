@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14), .iOS(.v17)],
     products: [.library(name: "BTKit", targets: ["BTKit"])],
     targets: [
-        .target(name: "BTKit"),
+        .target(name: "BTKit", resources: [.process("Resources")]),
         .testTarget(name: "BTKitTests", dependencies: ["BTKit"]),
     ]
 )

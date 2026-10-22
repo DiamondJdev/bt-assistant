@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BT — Today</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#DCD0C2}
+a{color:#2E2218}a:hover{color:#B8431A}
+button,input{font-family:inherit}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 860px; display: flex; flex-direction: column; background: #E9DFD3; color: #2E2218; font-family: 'Inter Tight', ui-sans-serif, system-ui, sans-serif; font-size: 14px; overflow: auto">
+
+  <header style="flex-shrink: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; height: 52px; border-bottom: 1px dashed #B5A796; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; min-width: 1100px">
+    <div style="display: flex; align-items: center; gap: 18px; padding: 0 20px">
+      <div style="display: flex; gap: 8px">
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+      </div>
+      <span style="font-family: 'Inter Tight', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.32em">B T</span>
+    </div>
+    <nav aria-label="Modules" style="grid-column: span 2; display: flex; gap: 28px; padding: 0 20px">
+      <a href="Today.dc.html" aria-current="page" style="color: #2E2218; text-decoration: none; border-bottom: 1.5px solid #2E2218; padding-bottom: 2px">Today</a>
+      <a href="Focus.dc.html" style="color: #6B5C4C; text-decoration: none">Focus</a>
+      <a href="Code.dc.html" style="color: #6B5C4C; text-decoration: none">Code</a>
+      <a href="CalWeek.dc.html" style="color: #6B5C4C; text-decoration: none">Calendar</a>
+      <a href="BT.dc.html" style="color: #6B5C4C; text-decoration: none">BT</a>
+    </nav>
+    <div style="display: flex; justify-content: flex-end; padding: 0 20px">
+      <a href="BT.dc.html" style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid #2E2218; color: #2E2218; text-decoration: none">Ask BT <span style="color: #6B5C4C">⌘K</span></a>
+    </div>
+  </header>
+
+  <main id="today" style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(220px, 1fr) minmax(280px, 1.25fr) minmax(200px, 0.95fr); min-width: 1100px">
+
+    <!-- Clock -->
+    <section aria-label="Now" style="display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-right: 1px dashed #B5A796; border-bottom: 1px dashed #B5A796">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">Thu 22 Oct<br>Fall · Week 9</span>
+      <span style="font-size: 64px; font-weight: 500; letter-spacing: -0.045em; line-height: 0.9; font-variant-numeric: tabular-nums">12:46</span>
+    </section>
+
+    <!-- Agenda -->
+    <section aria-label="Agenda" style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px; padding: 20px; border-right: 1px dashed #B5A796; border-bottom: 1px dashed #B5A796; min-height: 0; overflow: hidden">
+      <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C; margin-bottom: 10px"><span>Calendar</span><a href="CalDay.dc.html" style="color: #2E2218">{{agendaCount}} remaining →</a></div>
+      <sc-for list="{{agenda}}" as="r" hint-placeholder-count="4">
+        <div style="display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid #D6C9B9">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: {{r.tc}}">{{r.time}}</span>
+          <span style="font-size: 17px; font-weight: 500; color: {{r.c}}">{{r.title}}</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: {{r.mc}}">{{r.meta}}</span>
+        </div>
+      </sc-for>
+    </section>
+
+    <!-- Code time -->
+    <a href="Code.dc.html" aria-label="Code time — open Code" style="display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-bottom: 1px dashed #B5A796; color: #2E2218; text-decoration: none">
+      <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>Code time</span><span>Goal 4h</span></div>
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <span style="font-size: 52px; font-weight: 500; letter-spacing: -0.04em; line-height: 0.9">3h 12m</span>
+        <div role="img" aria-label="80 percent of daily coding goal" style="display: flex; gap: 3px; height: 18px">
+          <sc-for list="{{ticks}}" as="t" hint-placeholder-count="24">
+            <span style="flex: 1; border-radius: 1px; background: {{t.c}}"></span>
+          </sc-for>
+        </div>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6B5C4C">bt-client 1h48 · tariffninja 52m · mirai 32m →</span>
+      </div>
+    </a>
+
+    <!-- Focus ring -->
+    <section aria-label="Focus timer" style="grid-column: span 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-right: 1px dashed #B5A796; border-bottom: 1px dashed #B5A796">
+      <div style="display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-right: 1px dashed #B5A796">
+        <a href="Focus.dc.html" style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C; text-decoration: none">Focus →<br>Session 2 of 4 · {{statusLabel}}</a>
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <span style="font-size: 22px; font-weight: 500; line-height: 1.2; letter-spacing: -0.01em">Calendar sync module<br><span style="color: #6B5C4C">bt-client</span></span>
+          <div style="display: flex; gap: 8px">
+            <button onClick="{{togglePause}}" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 0; background: #2E2218; color: #F4EDE4; font-size: 13px; font-weight: 500; cursor: pointer">{{pauseLabel}}</button>
+            <button onClick="{{addFive}}" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 13px; cursor: pointer">+5 min</button>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; position: relative">
+        <svg width="280" height="280" viewBox="0 0 300 300" role="img" aria-label="Focus ring: {{clock}} remaining">
+          <sc-for list="{{ring}}" as="l" hint-placeholder-count="160">
+            <line x1="{{l.x1}}" y1="{{l.y1}}" x2="{{l.x2}}" y2="{{l.y2}}" stroke="{{l.c}}" stroke-width="1.1" stroke-linecap="round"></line>
+          </sc-for>
+        </svg>
+        <span role="timer" style="position: absolute; font-family: 'Geist Mono', monospace; font-size: 26px; font-weight: 500; letter-spacing: -0.02em">{{clock}}</span>
+      </div>
+    </section>
+
+    <!-- BT statement -->
+    <section aria-label="BT" style="grid-column: span 2; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 20px; border-bottom: 1px dashed #B5A796">
+      <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>BT · read 3 modules</span><span>12:45</span></div>
+      <sc-if value="{{notBooked}}" hint-placeholder-val="{{ true }}">
+        <p style="margin: 0; font-size: 30px; font-weight: 500; line-height: 1.18; letter-spacing: -0.025em; text-wrap: pretty; max-width: 620px">You have 44 minutes before Discrete Math. <span style="color: #6B5C4C">Finish the sync tests, stop at 1:20, and I’ll put</span> <span style="color: #B8431A">session 3 at 2:55.</span></p>
+        <div style="display: flex; gap: 8px">
+          <button onClick="{{book}}" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 0; background: #D9531E; color: #1F120A; font-size: 13px; font-weight: 600; cursor: pointer">Book 2:55</button>
+          <a href="BT.dc.html" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid #2E2218; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">Reply</a>
+        </div>
+      </sc-if>
+      <sc-if value="{{booked}}" hint-placeholder-val="{{ false }}">
+        <p style="margin: 0; font-size: 30px; font-weight: 500; line-height: 1.18; letter-spacing: -0.025em; text-wrap: pretty; max-width: 620px">Booked. <span style="color: #6B5C4C">Session 3 is on your calendar at</span> <span style="color: #B8431A">2:55 – 3:45</span><span style="color: #6B5C4C">, and Focus will start it for you.</span></p>
+        <div style="display: flex; gap: 8px">
+          <button onClick="{{unbook}}" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 13px; cursor: pointer">Undo</button>
+          <a href="CalWeek.dc.html" style="height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid #2E2218; color: #2E2218; font-size: 13px; display: flex; align-items: center; text-decoration: none">See in Calendar</a>
+        </div>
+      </sc-if>
+    </section>
+
+    <!-- Greeting -->
+    <section aria-label="Greeting" style="grid-column: span 2; display: flex; align-items: flex-end; padding: 20px; border-right: 1px dashed #B5A796">
+      <h1 style="margin: 0; font-size: 96px; font-weight: 500; letter-spacing: -0.055em; line-height: 0.88">Afternoon,<br>Cameron</h1>
+    </section>
+
+    <!-- Composer -->
+    <section aria-label="Message BT" style="grid-column: span 2; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 20px">
+      <sc-if value="{{sent}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 12px; border: 1px dashed #D9531E; background: rgba(217,83,30,0.06)">
+          <span style="font-size: 15px">Sent to BT: “{{sentText}}”</span>
+          <a href="BT.dc.html" style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap">Open thread →</a>
+        </div>
+      </sc-if>
+      <label for="today-input" style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">Tell BT</label>
+      <div style="display: flex; align-items: center; gap: 10px; border-bottom: 1.5px solid #2E2218; padding-bottom: 10px">
+        <input id="today-input" type="text" value="{{draft}}" onChange="{{onDraft}}" onKeyDown="{{onKey}}" placeholder="Move CHEM review to after work…" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #2E2218; font-size: 24px; letter-spacing: -0.02em">
+        <button onClick="{{send}}" aria-label="Send" style="width: 40px; height: 40px; border-radius: 50%; border: 0; background: #2E2218; color: #F4EDE4; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9531E","options":["#D9531E","#2E6B4F","#3D4FD1"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  g(k, d) { return this.state && this.state[k] !== undefined ? this.state[k] : d; }
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (this.g('paused', false)) return;
+      const left = this.g('left', 1122);
+      if (left > 0) this.setState({ left: left - 1 });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  renderVals() {
+    const accent = this.props.accent ?? '#D9531E';
+    const left = this.g('left', 1122), total = this.g('total', 1500), paused = this.g('paused', false);
+    const booked = this.g('booked', false), draft = this.g('draft', ''), sentText = this.g('sentText', '');
+    const done = 1 - left / total;
+    const N = 160, cx = 150, cy = 150;
+    const ring = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      const wob = 10 * Math.sin(a * 3 + 0.6);
+      const r1 = 62 + wob, r2 = 104 + wob * 0.6, tw = 0.42;
+      ring.push({
+        x1: (cx + r1 * Math.cos(a)).toFixed(2), y1: (cy + r1 * Math.sin(a)).toFixed(2),
+        x2: (cx + r2 * Math.cos(a + tw)).toFixed(2), y2: (cy + r2 * Math.sin(a + tw)).toFixed(2),
+        c: i / N < done ? accent : (i % 2 ? '#8C7E70' : '#B3A595')
+      });
+    }
+    const ticks = [];
+    for (let i = 0; i < 24; i++) ticks.push({ c: i < 19 ? '#2E2218' : '#CDBFAE' });
+    const mm = Math.floor(left / 60), ss = left % 60;
+    const clock = mm + ':' + (ss < 10 ? '0' : '') + ss;
+    const row = (time, title, meta, hot) => ({ time, title, meta, tc: hot ? '#B8431A' : '#6B5C4C', c: '#2E2218', mc: '#6B5C4C' });
+    const agenda = [row('NOW', 'Focus — calendar sync module', '→ ' + clock, true), row('1:30', 'MATH 26103 · Discrete Math', '[ROOM]')];
+    if (booked) agenda.push(Object.assign(row('2:55', 'Focus — session 3', 'BOOKED BY BT', true), { mc: '#B8431A' }));
+    agenda.push(row('4:00', 'CHEM 14103 · SI session', '[ROOM]'));
+    agenda.push(row('11:59', 'Discrete Math HW due', 'BLACKBOARD'));
+    const send = () => {
+      const t = (this.g('draft', '') || '').trim();
+      if (!t) return;
+      this.setState({ sentText: t, draft: '' });
+    };
+    return {
+      ring, ticks, clock, agenda, agendaCount: agenda.length,
+      statusLabel: left === 0 ? 'done' : (paused ? 'paused' : 'running'),
+      pauseLabel: paused ? 'Resume' : 'Pause',
+      togglePause: () => this.setState({ paused: !paused }),
+      addFive: () => this.setState({ left: left + 300, total: total + 300 }),
+      booked, notBooked: !booked,
+      book: () => this.setState({ booked: true }),
+      unbook: () => this.setState({ booked: false }),
+      draft, sent: !!sentText, sentText,
+      onDraft: (e) => this.setState({ draft: e.target.value }),
+      onKey: (e) => { if (e.key === 'Enter') send(); },
+      send
+    };
+  }
+}
+</script>
+</body>
+</html>

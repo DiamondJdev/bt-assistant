@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BT — Focus</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#DCD0C2}
+a{color:#2E2218}a:hover{color:#B8431A}
+button,input{font-family:inherit}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 860px; display: flex; flex-direction: column; background: #E9DFD3; color: #2E2218; font-family: 'Inter Tight', ui-sans-serif, system-ui, sans-serif; font-size: 14px; overflow: auto">
+
+  <header style="flex-shrink: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; height: 52px; border-bottom: 1px dashed #B5A796; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; min-width: 1100px">
+    <div style="display: flex; align-items: center; gap: 18px; padding: 0 20px">
+      <div style="display: flex; gap: 8px">
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+      </div>
+      <span style="font-family: 'Inter Tight', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.32em">B T</span>
+    </div>
+    <nav aria-label="Modules" style="grid-column: span 2; display: flex; gap: 28px; padding: 0 20px">
+      <a href="Today.dc.html" style="color: #6B5C4C; text-decoration: none">Today</a>
+      <a href="Focus.dc.html" aria-current="page" style="color: #2E2218; text-decoration: none; border-bottom: 1.5px solid #2E2218; padding-bottom: 2px">Focus</a>
+      <a href="Code.dc.html" style="color: #6B5C4C; text-decoration: none">Code</a>
+      <a href="CalWeek.dc.html" style="color: #6B5C4C; text-decoration: none">Calendar</a>
+      <a href="BT.dc.html" style="color: #6B5C4C; text-decoration: none">BT</a>
+    </nav>
+    <div style="display: flex; justify-content: flex-end; padding: 0 20px">
+      <button onClick="{{toggleDnd}}" aria-pressed="{{dndPressed}}" style="display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 0; color: #2E2218; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{dndDot}}"></span>{{dndLabel}}</button>
+    </div>
+  </header>
+
+  <main id="focus" style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); min-height: 0; min-width: 1100px">
+
+    <!-- Hard stop -->
+    <a href="CalDay.dc.html" aria-label="Hard stop — open today in Calendar" style="display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-right: 1px dashed #B5A796; border-bottom: 1px dashed #B5A796; min-height: 0; overflow: hidden; color: #2E2218; text-decoration: none">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">Hard stop →</span>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 56px; font-weight: 500; letter-spacing: -0.05em; line-height: 0.9">44<span style="font-size: 22px; color: #6B5C4C"> min</span></span>
+        <span style="font-size: 17px; font-weight: 500">until Discrete Math</span>
+        <span style="color: #6B5C4C">Leave by 1:20 · [Room]</span>
+      </div>
+    </a>
+
+    <!-- Ring stage -->
+    <section aria-label="Pomodoro timer" style="grid-column: span 2; grid-row: span 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; border-right: 1px dashed #B5A796; position: relative">
+      <span style="position: absolute; top: 20px; left: 20px; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">{{sessionLabel}}<br>{{taskLabel}}</span>
+      <span style="position: absolute; top: 20px; right: 20px; text-align: right; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C">{{cornerA}}<br>Class at 1:30</span>
+      <div style="position: relative; display: flex; align-items: center; justify-content: center">
+        <svg width="500" height="500" viewBox="0 0 300 300" role="img" aria-label="Focus ring: {{clock}} remaining">
+          <sc-for list="{{ring}}" as="l" hint-placeholder-count="220">
+            <line x1="{{l.x1}}" y1="{{l.y1}}" x2="{{l.x2}}" y2="{{l.y2}}" stroke="{{l.c}}" stroke-width="0.8" stroke-linecap="round"></line>
+          </sc-for>
+        </svg>
+        <div style="position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px">
+          <span role="timer" style="font-size: 92px; font-weight: 500; letter-spacing: -0.055em; line-height: 0.9; font-variant-numeric: tabular-nums">{{clock}}</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: {{ofColor}}">{{ofLabel}}</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px">
+        <button onClick="{{togglePause}}" style="height: 44px; padding: 0 24px; border-radius: 999px; border: 0; background: #2E2218; color: #F4EDE4; font-size: 14px; font-weight: 500; cursor: pointer">{{pauseLabel}}</button>
+        <button onClick="{{addFive}}" style="height: 44px; padding: 0 20px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 14px; cursor: pointer">+5 min</button>
+        <button onClick="{{endOrNext}}" style="height: 44px; padding: 0 20px; border-radius: 999px; border: 1px solid #2E2218; background: transparent; color: #2E2218; font-size: 14px; cursor: pointer">{{endLabel}}</button>
+      </div>
+    </section>
+
+    <!-- Now playing -->
+    <section aria-label="Now playing" style="grid-row: span 2; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-bottom: 1px dashed #B5A796; min-height: 0; overflow: hidden">
+      <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>{{playState}}</span><span>Apple Music</span></div>
+      <div aria-hidden="true" style="height: 180px; flex-shrink: 0; width: 100%; border-radius: 4px; background: #2E2218; display: flex; align-items: center; justify-content: center; overflow: hidden">
+        <svg width="100%" height="100%" viewBox="0 0 200 200">
+          <sc-for list="{{art}}" as="c" hint-placeholder-count="14">
+            <circle cx="100" cy="100" r="{{c.r}}" fill="none" stroke="{{c.c}}" stroke-width="1"></circle>
+          </sc-for>
+        </svg>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em">{{trackTitle}}</span>
+        <span style="color: #6B5C4C">[Artist] · Deep Work · {{trackNo}} of 18</span>
+      </div>
+      <div role="img" aria-label="Audio level" style="display: flex; align-items: flex-end; gap: 3px; height: 36px">
+        <sc-for list="{{bars}}" as="b" hint-placeholder-count="32">
+          <span style="flex: 1; border-radius: 1px; background: {{b.c}}; height: {{b.h}}px"></span>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="height: 2px; background: #CDBFAE"><div style="width: {{posPct}}%; height: 2px; background: #2E2218"></div></div>
+        <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; color: #6B5C4C"><span>{{posLabel}}</span><span>3:41</span></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <button onClick="{{prevTrack}}" aria-label="Previous track" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: #2E2218; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h2v14H7zM20 5v14L10 12z"></path></svg></button>
+        <button onClick="{{togglePlay}}" aria-label="{{playAria}}" style="width: 52px; height: 52px; border-radius: 50%; border: 0; background: #2E2218; color: #F4EDE4; cursor: pointer; display: flex; align-items: center; justify-content: center">
+          <sc-if value="{{playing}}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg></sc-if>
+          <sc-if value="{{notPlaying}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"></path></svg></sc-if>
+        </button>
+        <button onClick="{{nextTrack}}" aria-label="Next track" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: #2E2218; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 5h2v14h-2zM4 5v14l10-7z"></path></svg></button>
+      </div>
+    </section>
+
+    <!-- Session checklist -->
+    <section aria-label="This session" style="display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-right: 1px dashed #B5A796; border-bottom: 1px dashed #B5A796">
+      <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>Goal for this session</span><span>{{goalsDone}} / 3</span></div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <sc-for list="{{goals}}" as="g" hint-placeholder-count="3">
+          <label style="display: flex; gap: 10px; align-items: center; color: {{g.c}}; cursor: pointer"><input type="checkbox" checked="{{g.done}}" onChange="{{g.toggle}}" style="accent-color: #2E2218; width: 16px; height: 16px"><span style="text-decoration: {{g.td}}">{{g.t}}</span></label>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Daily focus total -->
+    <section aria-label="Focused today" style="display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-right: 1px dashed #B5A796">
+      <div style="display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C"><span>Focused today</span><span>Goal 2h</span></div>
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <span style="font-size: 52px; font-weight: 500; letter-spacing: -0.045em; line-height: 0.9">{{focusedLabel}}</span>
+        <div role="img" aria-label="{{focusedMin}} of 120 minutes" style="display: flex; gap: 3px; height: 18px">
+          <sc-for list="{{ticks}}" as="t" hint-placeholder-count="24">
+            <span style="flex: 1; border-radius: 1px; background: {{t.c}}"></span>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <!-- BT -->
+    <section aria-label="BT" style="display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 20px">
+      <a href="BT.dc.html" style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6B5C4C; text-decoration: none">BT →</a>
+      <p style="margin: 0; font-size: 19px; font-weight: 500; line-height: 1.25; letter-spacing: -0.015em">{{btLineA}} <span style="color: #B8431A">{{btLineB}}</span></p>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9531E","options":["#D9531E","#2E6B4F","#3D4FD1"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  g(k, d) { return this.state && this.state[k] !== undefined ? this.state[k] : d; }
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      const upd = {};
+      if (!this.g('paused', false)) {
+        const left = this.g('left', 1122);
+        if (left > 0) {
+          upd.left = left - 1;
+          if (this.g('mode', 'focus') === 'focus') upd.elapsed = this.g('elapsed', 0) + 1;
+        }
+      }
+      if (this.g('playing', true)) {
+        const p = this.g('pos', 84) + 1;
+        if (p >= 221) { upd.pos = 0; upd.track = (this.g('track', 3) + 1) % 18; } else upd.pos = p;
+      }
+      this.setState(upd);
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  renderVals() {
+    const accent = this.props.accent ?? '#D9531E';
+    const mode = this.g('mode', 'focus');
+    const left = this.g('left', 1122), total = this.g('total', 1500), paused = this.g('paused', false);
+    const done = 1 - left / total;
+    const N = 220, cx = 150, cy = 150;
+    const ring = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      const wob = 9 * Math.sin(a * 3 + 0.6);
+      const r1 = 92 + wob, r2 = 132 + wob * 0.5, tw = 0.36;
+      ring.push({
+        x1: (cx + r1 * Math.cos(a)).toFixed(2), y1: (cy + r1 * Math.sin(a)).toFixed(2),
+        x2: (cx + r2 * Math.cos(a + tw)).toFixed(2), y2: (cy + r2 * Math.sin(a + tw)).toFixed(2),
+        c: i / N < done ? (mode === 'break' ? '#2E6B4F' : accent) : (i % 2 ? '#8C7E70' : '#B3A595')
+      });
+    }
+    const art = [];
+    for (let i = 0; i < 14; i++) art.push({ r: 8 + i * 6.5, c: i % 3 === 0 ? accent : '#8C7E70' });
+    const playing = this.g('playing', true), pos = this.g('pos', 84), track = this.g('track', 3);
+    const bars = [];
+    for (let i = 0; i < 32; i++) {
+      const base = Math.abs(Math.sin(i * 0.7 + (playing ? pos * 0.9 : 0)) * Math.cos(i * 0.23));
+      bars.push({ h: playing ? 6 + Math.round(28 * base) : 4, c: i / 32 < pos / 221 ? '#2E2218' : '#B3A595' });
+    }
+    const elapsed = this.g('elapsed', 0);
+    const focusedMin = 31 + Math.floor(elapsed / 60);
+    const ticks = [];
+    for (let i = 0; i < 24; i++) ticks.push({ c: i < Math.round(focusedMin / 5) ? '#2E2218' : '#CDBFAE' });
+    const goalState = this.g('goals', [true, false, false]);
+    const names = ['Write EventKit adapter', 'Unit tests for recurring events', 'Push to bt-client'];
+    const goals = names.map((t, i) => ({
+      t, done: goalState[i], c: goalState[i] ? '#6B5C4C' : '#2E2218', td: goalState[i] ? 'line-through' : 'none',
+      toggle: () => { const n = goalState.slice(); n[i] = !n[i]; this.setState({ goals: n }); }
+    }));
+    const mm = Math.floor(left / 60), ss = left % 60;
+    const clock = mm + ':' + (ss < 10 ? '0' : '') + ss;
+    const tm = Math.floor(total / 60);
+    const fmt = (s) => Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+    const dnd = this.g('dnd', true);
+    return {
+      ring, art, bars, ticks, goals, clock,
+      goalsDone: goalState.filter(Boolean).length,
+      sessionLabel: mode === 'break' ? 'Break · 5 min' : 'Session 2 of 4',
+      taskLabel: mode === 'break' ? 'Stand up, water, no phone' : 'Calendar sync module',
+      cornerA: mode === 'break' ? 'Session 3 next' : 'Break at 1:07',
+      ofLabel: left === 0 ? (mode === 'break' ? 'Break over' : 'Session complete') : (paused ? 'Paused · of ' + tm + ':00' : 'of ' + tm + ':00'),
+      ofColor: paused || left === 0 ? '#B8431A' : '#6B5C4C',
+      pauseLabel: paused ? 'Resume' : 'Pause',
+      togglePause: () => this.setState({ paused: !paused }),
+      addFive: () => this.setState({ left: left + 300, total: total + 300 }),
+      endLabel: mode === 'break' ? 'Start session 3' : 'End session',
+      endOrNext: () => mode === 'break'
+        ? this.setState({ mode: 'focus', left: 1500, total: 1500, paused: false })
+        : this.setState({ mode: 'break', left: 300, total: 300, paused: false, playing: false }),
+      playing, notPlaying: !playing,
+      playState: playing ? 'Now playing' : 'Paused',
+      playAria: playing ? 'Pause music' : 'Play music',
+      togglePlay: () => this.setState({ playing: !playing }),
+      nextTrack: () => this.setState({ track: (track + 1) % 18, pos: 0 }),
+      prevTrack: () => this.setState({ track: (track + 17) % 18, pos: 0 }),
+      trackTitle: '[Track ' + (track + 1) + ' title]', trackNo: track + 1,
+      posPct: Math.round(pos / 221 * 100), posLabel: fmt(pos),
+      focusedMin, focusedLabel: Math.floor(focusedMin / 60) + 'h ' + (focusedMin % 60) + 'm',
+      dndLabel: dnd ? 'Do not disturb' : 'Notifications on',
+      dndDot: dnd ? '#D9531E' : '#B5A796', dndPressed: dnd ? 'true' : 'false',
+      toggleDnd: () => this.setState({ dnd: !dnd }),
+      btLineA: mode === 'break' ? 'Music is paused for your break.' : 'At the break I’ll fade the music and',
+      btLineB: mode === 'break' ? 'Leave for class by 1:20.' : 'remind you to leave by 1:20.'
+    };
+  }
+}
+</script>
+</body>
+</html>
