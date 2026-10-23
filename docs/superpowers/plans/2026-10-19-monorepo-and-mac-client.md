@@ -48,7 +48,8 @@ Constraints for tool design:
 7. Coding tracker. VS Code extension, `inbox/*.jsonl` watcher, sessionizer, Swift Charts stats, `coding_*` tools.
 8. Today view and events. Proactive event turns with a per-hour cap and quiet hours, start focus from an event, auto-tagging.
 9. Voice in the Mac client over the existing `/voice/ws` wire format. The browser client stays, since the owner uses it on the iPhone.
-10. Native iOS app, after the Mac app is finished. It reuses BTKit; the browser client is deleted once the iOS app covers what it does.
+10. UI Design, remastering the UI/UX of the app into a good-looking productive app. The user MUST provide design examples and screenshots for this step, do not build otherwise. 
+11. Native iOS app, after the Mac app is finished. It reuses BTKit.
 
 Later goals the owner described on October 20, 2026, not yet assigned to a design:
 
