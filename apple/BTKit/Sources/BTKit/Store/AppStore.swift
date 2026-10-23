@@ -32,6 +32,8 @@ public final class AppStore {
     /// Newest first.
     public var ledger: [LedgerEntry]
     public let nowPlaying: (any NowPlayingSource)?
+    /// The BT server connection. BT shows sample threads while it has no address.
+    public let chat: ChatModel?
 
     // MARK: Per-screen state
 
@@ -47,7 +49,8 @@ public final class AppStore {
         clock: @escaping () -> Date = { .now },
         calendar: Calendar = .bt,
         sample: SampleData? = nil,
-        nowPlaying: (any NowPlayingSource)? = nil
+        nowPlaying: (any NowPlayingSource)? = nil,
+        chat: ChatModel? = nil
     ) {
         let start = clock()
         let sample = sample ?? SampleData(now: start, calendar: calendar)
@@ -64,6 +67,7 @@ public final class AppStore {
         self.threads = sample.threads
         self.ledger = sample.ledger
         self.nowPlaying = nowPlaying
+        self.chat = chat
         self.selectedProjectID = sample.projects.first?.id
         self.selectedThreadID = sample.threads.first?.id
     }

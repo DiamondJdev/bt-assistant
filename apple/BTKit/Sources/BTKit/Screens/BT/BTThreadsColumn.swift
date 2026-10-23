@@ -11,6 +11,7 @@ struct BTThreadsColumn: View {
     var content: some View {
         VStack(alignment: .leading, spacing: 26) {
             newThreadButton
+            if store.chat != nil, !store.btIsLive { BTOfflineNotice() }
             threadList
             BTMemoryList(store: store)
         }
@@ -34,31 +35,46 @@ struct BTThreadsColumn: View {
         .accessibilityLabel("New thread")
     }
 
-    private var threadList: some View {
+    @ViewBuilder private var threadList: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Threads").monoLabel().padding(.bottom, 8)
-            ForEach(store.threads) { thread in
-                BTThreadRow(store: store, thread: thread)
+            if let chat = store.chat, store.btIsLive {
+                ForEach(chat.sessions) { session in
+                    BTThreadRow(
+                        title: session.label, project: nil,
+                        meta: BTFormat.age(Date(timeIntervalSince1970: session.updatedAt), now: store.now, calendar: store.calendar),
+                        selected: chat.selectedSessionID == session.id
+                    ) { Task { await chat.select(session.id) } }
+                }
+            } else {
+                ForEach(store.threads) { thread in
+                    BTThreadRow(
+                        title: thread.title, project: store.project(thread.projectID)?.name,
+                        meta: BTFormat.age(thread.messages.last?.time, now: store.now, calendar: store.calendar),
+                        selected: store.selectedThreadID == thread.id
+                    ) { store.selectedThreadID = thread.id }
+                }
             }
         }
     }
 }
 
 private struct BTThreadRow: View {
-    let store: AppStore
-    let thread: ChatThread
-
-    private var selected: Bool { store.selectedThreadID == thread.id }
+    let title: String
+    let project: String?
+    let meta: String
+    let selected: Bool
+    let action: () -> Void
 
     var body: some View {
-        Button { store.selectedThreadID = thread.id } label: {
+        Button(action: action) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(thread.title)
+                    Text(title)
                         .font(.inter(14, selected ? .semibold : .regular))
                         .lineLimit(1)
-                    if let name = store.project(thread.projectID)?.name {
-                        Text("Project · \(name)").monoLabel(10, color: .btAccentText)
+                    if let project {
+                        Text("Project · \(project)").monoLabel(10, color: .btAccentText)
                     }
                 }
                 Spacer(minLength: 8)
@@ -71,15 +87,6 @@ private struct BTThreadRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    /// "NOW", "2H", "TUE" from the latest message; "NEW" when empty.
-    private var meta: String {
-        guard let last = thread.messages.last?.time else { return "NEW" }
-        let cal = store.calendar
-        guard cal.isDate(last, inSameDayAs: store.now) else { return BTFormat.weekday(last, cal).uppercased() }
-        let hours = Int(store.now.timeIntervalSince(last) / 3600)
-        return hours < 1 ? "NOW" : "\(hours)H"
     }
 }
 

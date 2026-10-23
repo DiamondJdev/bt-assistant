@@ -270,12 +270,15 @@ public struct Message: Identifiable, Equatable, Sendable {
     public var insight: Insight?
     public var resultCards: [ResultCard]
     public var time: Date
+    /// The server answered with the cloud model.
+    public var isCloud: Bool
 
     public init(
         id: String = UUID().uuidString, role: MessageRole, text: String? = nil, insight: Insight? = nil,
-        resultCards: [ResultCard] = [], time: Date = .now
+        resultCards: [ResultCard] = [], time: Date = .now, isCloud: Bool = false
     ) {
         self.id = id
+        self.isCloud = isCloud
         self.role = role
         self.text = text
         self.insight = insight

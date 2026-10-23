@@ -6,6 +6,12 @@ struct BTConversation: View {
 
     private var thread: ChatThread? { store.thread(store.selectedThreadID) }
 
+    /// Server turns when live, else the selected sample thread.
+    private var shown: [Message] {
+        guard let chat = store.chat, store.btIsLive else { return thread?.messages ?? [] }
+        return BTLive.messages(turns: chat.turns, streaming: chat.streamingText, now: store.now)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             messages
@@ -18,31 +24,38 @@ struct BTConversation: View {
         ScrollViewReader { proxy in
             ScrollView { messageList }
                 .defaultScrollAnchor(.bottom)
-            .onChange(of: thread?.messages.last?.id) { _, last in
-                guard let last else { return }
-                withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+            // Text too, so a streaming reply keeps the bottom in view.
+            .onChange(of: [shown.last?.id, shown.last?.text, store.chat?.pendingApprovals.last?.id]) {
+                proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
     }
 
     var messageList: some View {
         VStack(alignment: .leading, spacing: 22) {
-            if let thread, thread.messages.isEmpty { emptyState(thread) }
-            ForEach(thread?.messages ?? []) { message in
-                BTMessageView(store: store, message: message).id(message.id)
+            let messages = shown
+            if messages.isEmpty { emptyState }
+            ForEach(messages) { message in
+                BTMessageView(store: store, message: message)
             }
+            if let chat = store.chat, store.btIsLive {
+                ForEach(chat.pendingApprovals) { BTApprovalCard(approval: $0, chat: chat) }
+                if let error = chat.errorMessage { BTErrorRow(message: error, chat: chat) }
+            }
+            Color.clear.frame(height: 1).id("bottom")
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func emptyState(_ thread: ChatThread) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let name = store.project(thread.projectID)?.name {
+    private var emptyState: some View {
+        let live = store.btIsLive
+        return VStack(alignment: .leading, spacing: 8) {
+            if !live, let name = store.project(thread?.projectID)?.name {
                 Text("Scoped to \(name)").monoLabel(color: .btAccentText)
             }
-            Text(thread.title).interStyle(40, .medium, tracking: -0.045)
+            Text(live ? "New conversation" : thread?.title ?? "New thread").interStyle(40, .medium, tracking: -0.045)
             Text("Start with a shortcut below, or just say what you need.").foregroundStyle(Color.btMuted)
         }
         .padding(.vertical, 40)
@@ -69,9 +82,10 @@ struct BTMessageView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                Text("BT · \(BTFormat.clockWithPeriod(message.time, store.calendar))").monoLabel()
+                Text("BT · \(BTFormat.clockWithPeriod(message.time, store.calendar))" + (message.isCloud ? " · Cloud" : ""))
+                    .monoLabel()
                 if let text = message.text {
-                    Text(text).font(.inter(17)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
+                    Text(Self.markdown(text)).textSelection(.enabled).font(.inter(17)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
                 }
                 if let insight = message.insight { BTInsightCard(insight: insight, open: store.open) }
                 if !message.resultCards.isEmpty {
@@ -82,6 +96,12 @@ struct BTMessageView: View {
             }
             .padding(.trailing, 60)
         }
+    }
+
+    /// Inline markdown (bold, code, links) from the server; plain text when it doesn't parse.
+    static func markdown(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
     }
 }
 
@@ -126,11 +146,12 @@ struct BTComposer: View {
 
     var body: some View {
         @Bindable var state = store.btScreen
+        let draft = store.chat.flatMap { chat in store.btIsLive ? Bindable(chat).draft : nil } ?? $state.draft
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 ForEach(Self.chips, id: \.self) { chip in
                     Button {
-                        store.btScreen.draft = chip + " "
+                        draft.wrappedValue = chip + " "
                         focused = true
                     } label: {
                         Text(chip).font(.mono(11)).padding(.horizontal, 10).frame(height: 28)
@@ -142,7 +163,7 @@ struct BTComposer: View {
                 }
             }
             HStack(spacing: 10) {
-                TextField("Tell BT… try “/remember the lab is in room 210”", text: $state.draft)
+                TextField("Tell BT… try “/remember the lab is in room 210”", text: draft)
                     .textFieldStyle(.plain)
                     .interStyle(24, tracking: -0.02)
                     .focused($focused)
@@ -157,6 +178,7 @@ struct BTComposer: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .disabled(store.chat?.isSending == true && store.btIsLive)
                 .accessibilityLabel("Send")
             }
             .padding(.bottom, 8)
@@ -168,6 +190,10 @@ struct BTComposer: View {
     }
 
     private func send() {
+        if let chat = store.chat, store.btIsLive {
+            Task { await chat.send() }
+            return
+        }
         let text = store.btScreen.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         store.btScreen.draft = ""

@@ -29,7 +29,7 @@ struct BTMacApp: App {
         let chat = ChatModel()
         // The new screens read AppStore; these modules still serve BT's tool calls and the menu bar.
         chat.modules = [BTModule(chat: chat), pomodoro, CalendarModule(), coding]
-        _store = State(initialValue: AppStore(nowPlaying: music))
+        _store = State(initialValue: AppStore(nowPlaying: music, chat: chat))
     }
 
     var body: some Scene {

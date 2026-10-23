@@ -24,6 +24,7 @@ public struct BTAppView: View {
         .onChange(of: store.focus.mode) { _, mode in
             if mode == .break { store.pauseMusicForBreak() }
         }
+        .modifier(BTServerAddressSync(chat: store.chat))
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))

@@ -22,6 +22,7 @@ public struct BTScreen: View {
 extension AppStore {
     /// Opens a fresh, empty thread (⌘N).
     func newBTThread() {
+        if let chat, btIsLive { return chat.startNewConversation() }
         let thread = ChatThread(title: "New thread")
         threads.insert(thread, at: 0)
         selectedThreadID = thread.id
