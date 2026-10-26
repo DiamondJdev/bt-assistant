@@ -51,12 +51,15 @@ def _dev_ui_default() -> bool:
 
 @dataclass(frozen=True)
 class Config:
+	# Primary text and voice model: "openai" or "ollama". Read once at startup.
+	llm_provider: str = field(default_factory=lambda: os.environ.get("BT_LLM_PROVIDER", "openai"))
+
 	# Local LLM (Ollama)
 	ollama_base_url: str = field(default_factory=lambda: os.environ.get("BT_OLLAMA_URL", "http://127.0.0.1:11434"))
 	ollama_model: str = field(default_factory=lambda: os.environ.get("BT_OLLAMA_MODEL", "qwen3:8b"))
 	# ollama_model: str = os.environ.get("BT_OLLAMA_MODEL", "gpt-oss:20b") Heavy Model
 
-	# Cloud fallback.
+	# Cloud model: primary in openai mode, escalation target in ollama mode.
 	openai_api_key: str | None = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY"))
 	openai_model: str = field(default_factory=lambda: os.environ.get("BT_OPENAI_MODEL", "gpt-5.6-luna"))
 	context_limit_provider: str | None = field(default_factory=lambda: os.environ.get("BT_CONTEXT_LIMIT_PROVIDER"))
@@ -99,6 +102,12 @@ class Config:
 		# BT has no login; the tailnet is the access boundary, so never listen beyond it.
 		if not _private_bind(self.host):
 			raise ValueError("BT_HOST must be loopback or a Tailscale address")
+
+	def validate_llm(self) -> None:
+		if self.llm_provider not in ("openai", "ollama"):
+			raise ValueError(f"BT_LLM_PROVIDER must be openai or ollama, got {self.llm_provider!r}")
+		if self.llm_provider == "openai" and not (self.openai_api_key or "").strip():
+			raise ValueError("OPENAI_API_KEY is required when BT_LLM_PROVIDER=openai")
 
 	# Ollama serves a native API at /api and an OpenAI-compatible one at /v1.
 	# Callers pick the path so BT_OLLAMA_URL stays the only host setting.
