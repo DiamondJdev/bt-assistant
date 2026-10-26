@@ -4,6 +4,7 @@ import Foundation
 /// Swap for real sources through `CalendarSource` and `CodeActivitySource` later.
 public struct SampleData {
     public var events: [CalendarEvent]
+    public var allDayEvents: [CalendarEvent]
     public var focus: ActiveFocusSession
     public var focusedTodaySeconds: Int
     public var projects: [Project]
@@ -19,6 +20,10 @@ public struct SampleData {
             calendar.date(byAdding: .minute, value: Int(((Double(day * 24) + hour) * 60).rounded()), to: week)!
         }
         events = Self.weekEvents(at: at, todayIndex: todayIndex)
+        allDayEvents = [
+            CalendarEvent(id: "a1", title: "Fall break", start: at(5, 0), end: at(7, 0) - 1, kind: .classSession,
+                          source: .apple, isAllDay: true),
+        ]
         focus = ActiveFocusSession(
             id: "focus-now", taskTitle: "Calendar sync module", projectID: "bt-client", number: 2, plannedCount: 4,
             plannedSeconds: 1500, remainingSeconds: 1122,

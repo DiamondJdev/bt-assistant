@@ -14,6 +14,16 @@ struct PomodoroTimerTests {
         #expect(state.isRunning)
     }
 
+    @Test func extendingAddsToRunningAndPausedPhasesOnly() {
+        let running = PomodoroState.idle.started(at: t0, durations: durations).extended(by: 300)
+        #expect(running.endsAt == t0 + 1800)
+        #expect(running.phaseDuration == 1800)
+        let paused = PomodoroState.idle.started(at: t0, durations: durations).paused(at: t0 + 100).extended(by: 300)
+        #expect(paused.pausedRemaining == 1700)
+        #expect(paused.resumed(at: t0 + 200).startedAt == t0 + 100)
+        #expect(PomodoroState.idle.extended(by: 300) == .idle)
+    }
+
     @Test func completingWorkGoesToShortBreakAndReportsInterval() {
         let (state, interval) = PomodoroState.idle.started(at: t0, durations: durations)
             .completed(durations: durations)

@@ -6,12 +6,16 @@ struct CodeRoadmapCell: View {
     let now: Date
     let calendar: Calendar
     let askBT: () -> Void
+    let edit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 CodeNoteLabel(number: "2", text: "Roadmap")
                 Spacer()
+                if !project.stages.isEmpty {
+                    Button("Edit", action: edit).buttonStyle(.monoLink)
+                }
                 Button("Edit with BT", action: askBT).buttonStyle(.monoLink)
             }
             if let current = CodeRoadmapLabels.current(in: project) {
@@ -21,7 +25,7 @@ struct CodeRoadmapCell: View {
                 }
                 timeline
                 Spacer(minLength: 0)
-                Button("Plan stage \(current.index + 1) with BT", action: askBT)
+                Button("Update roadmap with BT", action: askBT)
                     .buttonStyle(.pill(.secondary, size: .small))
             } else if !project.stages.isEmpty {
                 timeline
@@ -57,7 +61,7 @@ struct CodeRoadmapCell: View {
     private var empty: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("No roadmap yet").interStyle(26, .medium, tracking: -0.03)
-            Text("BT can draft stages from the repo’s README and open issues.")
+            Text("BT reads the repo’s README and asks about missing goals before drafting stages for your approval.")
                 .foregroundStyle(Color.btMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)

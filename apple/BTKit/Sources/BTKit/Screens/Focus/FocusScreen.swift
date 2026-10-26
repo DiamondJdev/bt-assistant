@@ -11,7 +11,7 @@ public struct FocusScreen: View {
         SandGrid(columns: 4, rows: [1, 1, 1], minRowHeights: [220, 220, 200]) {
             HardStopCell(summary: summary) { store.open(.calendar(.day, date: store.now)) }
                 .gridCell(0, 0)
-            SessionGoalsCell(goals: $store.focus.goals, label: summary.goalsLabel)
+            SessionGoalsCell(goals: $store.focus.goals, label: summary.goalsLabel, add: store.addFocusGoal)
                 .gridCell(0, 1)
             FocusedTodayCell(summary: summary)
                 .gridCell(0, 2)

@@ -4,19 +4,24 @@ import SwiftUI
 /// Built to match design/screens/Code.dc.html.
 public struct CodeScreen: View {
     @Bindable var store: AppStore
+    @State private var sheet: CodeSheet?
     public init(store: AppStore) { self.store = store }
 
     public var body: some View {
         SandGrid(columns: 4, rows: [210, 319, 319], minRowHeights: [200, 220, 190]) {
-            CodeProjectList(store: store)
+            CodeProjectList(store: store, edit: { sheet = .details($0) })
                 .gridCell(0, 0, rows: 3)
             if let project = store.project(store.selectedProjectID) ?? store.projects.first {
                 let week = CodeWeek(activity: project.activity, now: store.now, calendar: store.calendar)
-                CodeHeadCell(project: project, week: week)
+                CodeHeadCell(project: project, week: week, edit: { sheet = .details(project) })
                     .gridCell(1, 0, columns: 3)
-                CodeRoadmapCell(project: project, now: store.now, calendar: store.calendar) {
-                    store.open(.bt(projectID: project.id))
-                }
+                CodeRoadmapCell(project: project, now: store.now, calendar: store.calendar, askBT: {
+                    if project.stages.isEmpty {
+                        Task { await store.draftRoadmap(projectID: project.id) }
+                    } else {
+                        Task { await store.editRoadmap(projectID: project.id) }
+                    }
+                }, edit: { sheet = .roadmap(project) })
                 .gridCell(1, 1, rows: 2)
                 CodeHeatCell(project: project, week: week)
                     .gridCell(2, 1, columns: 2)
@@ -27,6 +32,25 @@ public struct CodeScreen: View {
             }
         }
         .frame(minWidth: BTMetrics.minContentWidth)
+        .sheet(item: $sheet) { sheet in
+            switch sheet {
+            case .roadmap(let project): CodeRoadmapEditor(store: store, project: project)
+            case .details(let project): CodeProjectEditor(store: store, project: project)
+            }
+        }
+    }
+}
+
+/// The one sheet Code can show at a time.
+enum CodeSheet: Identifiable {
+    case roadmap(Project)
+    case details(Project)
+
+    var id: String {
+        switch self {
+        case .roadmap(let project): "roadmap-\(project.id)"
+        case .details(let project): "details-\(project.id)"
+        }
     }
 }
 

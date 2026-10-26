@@ -23,11 +23,17 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
     public var focusPlan: String?
     public var linkedProjectID: String?
     public var linkedAssignmentID: String?
+    /// Shown in the all-day row; `AppStore` keeps these in `allDayEvents`, apart from timed `events`.
+    public var isAllDay: Bool
+    public var calendarTitle: String?
+    public var hasAttendees: Bool
+    public var recurrenceSummary: String?
 
     public init(
         id: String = UUID().uuidString, title: String, start: Date, end: Date, kind: EventKind, source: EventSource,
         location: String? = nil, runAsFocus: Bool = false, focusPlan: String? = nil,
-        linkedProjectID: String? = nil, linkedAssignmentID: String? = nil
+        linkedProjectID: String? = nil, linkedAssignmentID: String? = nil, isAllDay: Bool = false,
+        calendarTitle: String? = nil, hasAttendees: Bool = false, recurrenceSummary: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -40,6 +46,10 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
         self.focusPlan = focusPlan
         self.linkedProjectID = linkedProjectID
         self.linkedAssignmentID = linkedAssignmentID
+        self.isAllDay = isAllDay
+        self.calendarTitle = calendarTitle
+        self.hasAttendees = hasAttendees
+        self.recurrenceSummary = recurrenceSummary
     }
 
     public var duration: TimeInterval { end.timeIntervalSince(start) }
@@ -47,7 +57,7 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
 
 public enum FocusMode: String, Sendable { case focus, `break` }
 
-public struct SessionGoal: Identifiable, Equatable, Sendable {
+public struct SessionGoal: Identifiable, Equatable, Codable, Sendable {
     public var id: String
     public var title: String
     public var isDone: Bool
@@ -107,11 +117,11 @@ public struct ActiveFocusSession: Equatable, Sendable {
     }
 }
 
-public enum StageStatus: String, Sendable { case done, current, next, final }
-public enum RoadmapTaskStatus: String, Sendable { case done, inReview, inProgress, todo, needsYou }
-public enum ActivitySource: String, Sendable { case agent, review, manual }
+public enum StageStatus: String, Codable, Sendable { case done, current, next, final }
+public enum RoadmapTaskStatus: String, Codable, Sendable { case done, inReview, inProgress, todo, needsYou }
+public enum ActivitySource: String, Codable, Sendable { case agent, review, manual }
 
-public struct RoadmapTask: Identifiable, Equatable, Sendable {
+public struct RoadmapTask: Identifiable, Equatable, Codable, Sendable {
     public var id: String
     public var title: String
     public var status: RoadmapTaskStatus
@@ -123,7 +133,7 @@ public struct RoadmapTask: Identifiable, Equatable, Sendable {
     }
 }
 
-public struct RoadmapStage: Identifiable, Equatable, Sendable {
+public struct RoadmapStage: Identifiable, Equatable, Codable, Sendable {
     public var id: String
     public var index: Int
     public var name: String
@@ -175,10 +185,12 @@ public struct Project: Identifiable, Equatable, Sendable {
     public var weeklyGoalHours: Double?
     public var stages: [RoadmapStage]
     public var activity: [CodingActivity]
+    /// Security-scoped bookmark for the repo folder picked in Code, so the sandboxed app can read its README.
+    public var bookmark: Data?
 
     public init(
         id: String, name: String, path: String, stack: String, branch: String? = nil, weeklyGoalHours: Double? = nil,
-        stages: [RoadmapStage] = [], activity: [CodingActivity] = []
+        stages: [RoadmapStage] = [], activity: [CodingActivity] = [], bookmark: Data? = nil
     ) {
         self.id = id
         self.name = name
@@ -188,6 +200,7 @@ public struct Project: Identifiable, Equatable, Sendable {
         self.weeklyGoalHours = weeklyGoalHours
         self.stages = stages
         self.activity = activity
+        self.bookmark = bookmark
     }
 }
 

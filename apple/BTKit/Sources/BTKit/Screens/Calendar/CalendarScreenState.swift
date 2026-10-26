@@ -5,7 +5,15 @@ import Observation
 @MainActor
 @Observable
 public final class CalendarScreenState {
+    var eventEditor: CalEventDraft?
+    var dayPanel: CalDayPanel?
+    var showFocusHistory: Bool {
+        didSet { defaults?.set(showFocusHistory, forKey: "calendar.showFocusHistory") }
+    }
+    private let defaults: UserDefaults?
+
     // Week
+    var weekTodayRequest = 0
     var hiddenWeekLayers: Set<CalWeekLayer> = []
     var draft = CalDraftReview()
 
@@ -19,7 +27,36 @@ public final class CalendarScreenState {
     var monthLayers: Set<CalMonthLayer> = [.study, .due, .classes]
     var monthDraftIDs: [String] = []
 
-    public init() {}
+    public init(defaults: UserDefaults? = nil) {
+        self.defaults = defaults
+        showFocusHistory = defaults?.bool(forKey: "calendar.showFocusHistory") ?? false
+    }
+
+    func planningEvents(_ events: [CalendarEvent]) -> [CalendarEvent] {
+        events.filter { showFocusHistory || $0.kind != .focusLogged }
+    }
+}
+
+enum CalDayPanel {
+    case composer, summary
+}
+
+struct CalEventDraft: Identifiable {
+    var event: CalendarEvent
+    var isNew: Bool
+    var id: String { event.id }
+    var isEditable: Bool { event.kind != .focusLogged && !event.isAllDay }
+    var isValid: Bool { event.end > event.start && !event.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    mutating func moveStart(to start: Date) {
+        let duration = event.duration
+        event.start = start
+        event.end = start.addingTimeInterval(duration)
+    }
+
+    mutating func setDuration(minutes: Int) {
+        event.end = event.start.addingTimeInterval(Double(minutes * 60))
+    }
 }
 
 /// Week sidebar calendar layers. Toggling one hides its kinds.
@@ -103,11 +140,9 @@ enum CalLayers {
     }
 }
 
-/// The Week BT bar's proposal about the sample draft block, with the block as it was for Undo.
+/// The Week BT bar's proposal about a draft block, with the block as it was for Undo.
 struct CalDraftReview: Equatable {
     enum Outcome: Equatable { case pending, kept, moved, discarded }
-
-    static let draftID = "draft"
 
     var outcome: Outcome = .pending
     var before: CalendarEvent?

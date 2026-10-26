@@ -85,12 +85,12 @@ struct CodeScreenActionsTests {
 
     @Test func emptyProjectDraftsRoadmapAndBooksWeekend() {
         let s = suggestions("waypave")
-        #expect(s.map(\.title) == ["Draft a roadmap from the repo", "Book 1h this weekend"])
+        #expect(s.map(\.title) == ["Draft a roadmap from the README", "Book 1h this weekend"])
         #expect(s[1].action == .book(start: date(24, 10), end: date(24, 11), title: "waypave"))
         let threads = store.threads.count
         store.acceptCodeSuggestion(s[0], slot: 0, projectID: "waypave")
-        #expect(store.threads.count == threads + 1)
-        #expect(store.route == .today) // a write, not navigation
+        #expect(store.threads.count == threads)
+        #expect(store.code.accepted["waypave"]?[0] == nil)
     }
 
     @Test func trackRepoAddsAndSelectsPlaceholder() {

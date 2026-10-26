@@ -3,6 +3,7 @@ import SwiftUI
 /// Column 1: the weekly total for all projects, then one row per project and "+ Track a repo".
 struct CodeProjectList: View {
     @Bindable var store: AppStore
+    let edit: (Project) -> Void
 
     var body: some View {
         let weeks = store.projects.map { CodeWeek(activity: $0.activity, now: store.now, calendar: store.calendar) }
@@ -22,6 +23,9 @@ struct CodeProjectList: View {
                     isSelected: project.id == (store.selectedProjectID ?? store.projects.first?.id)
                 ) {
                     store.selectedProjectID = project.id
+                }
+                .contextMenu {
+                    Button("Edit project…") { edit(project) }
                 }
             }
             CodeTrackRepo(store: store)
@@ -137,35 +141,23 @@ struct CodeSpark: View {
     }
 }
 
-/// "+ Track a repo": a dashed button that opens an inline path field.
+/// "+ Track a repo": a dashed button that opens a folder picker. Picking the folder is what grants
+/// the sandboxed app read access to the repo.
 struct CodeTrackRepo: View {
     @Bindable var store: AppStore
-    @FocusState private var focused: Bool
+    @State private var picking = false
 
     var body: some View {
-        Group {
-            if let draft = store.code.trackDraft {
-                TextField("~/dev/repo", text: Binding(get: { draft }, set: { store.code.trackDraft = $0 }))
-                    .textFieldStyle(.plain)
-                    .font(.mono(12))
-                    .padding(.horizontal, 12)
-                    .focused($focused)
-                    .onAppear { focused = true }
-                    .onSubmit {
-                        // A blank path just closes the field.
-                        store.trackRepo(path: draft)
-                        store.code.trackDraft = nil
-                    }
-            } else {
-                Button { store.code.trackDraft = "" } label: {
-                    Text("+ Track a repo").font(.inter(13))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
+        Button { picking = true } label: {
+            Text("+ Track a repo").font(.inter(13))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
         }
-        .frame(height: 44)
+        .buttonStyle(.plain)
         .overlay(Rectangle().strokeBorder(Color.btSubtle, style: StrokeStyle(lineWidth: 1, dash: BTMetrics.dash)))
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
+            guard case .success(let url) = result else { return }
+            store.trackRepo(path: url.path, bookmark: AppStore.repoBookmark(url))
+        }
     }
 }

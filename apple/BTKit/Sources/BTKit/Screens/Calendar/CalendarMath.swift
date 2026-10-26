@@ -28,6 +28,26 @@ enum CalTimeline {
         return (min(y, max(0, height - h)), h)
     }
 
+    /// Side-by-side lanes for one day's events: each event's lane, and how many lanes its overlap group uses.
+    static func lanes(_ events: [CalendarEvent]) -> [String: (lane: Int, of: Int)] {
+        var result: [String: (lane: Int, of: Int)] = [:]
+        var group: [(id: String, lane: Int)] = []
+        var laneEnds: [Date] = []
+        func closeGroup() {
+            for g in group { result[g.id] = (g.lane, laneEnds.count) }
+            group = []
+            laneEnds = []
+        }
+        for e in events.sorted(by: { ($0.start, $0.end) < ($1.start, $1.end) }) {
+            if let groupEnd = laneEnds.max(), e.start >= groupEnd { closeGroup() }
+            let lane = laneEnds.firstIndex { $0 <= e.start } ?? laneEnds.count
+            if lane == laneEnds.count { laneEnds.append(e.end) } else { laneEnds[lane] = e.end }
+            group.append((e.id, lane))
+        }
+        closeGroup()
+        return result
+    }
+
     /// Whether the time of day is inside the grid (for the "now" line).
     static func isVisible(_ date: Date, _ cal: Calendar) -> Bool {
         (startHour...endHour).contains(hour(date, cal))

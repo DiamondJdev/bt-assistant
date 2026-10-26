@@ -14,8 +14,30 @@ extension AppStore {
     }
 
     func calSelect(_ id: String?) {
-        selectedEventID = selectedEventID == id ? nil : id
+        selectedEventID = id
+        calendarScreen.eventEditor = id.flatMap { selectedID in event(selectedID) ?? allDayEvents.first { $0.id == selectedID } }
+            .map { CalEventDraft(event: $0, isNew: false) }
     }
+
+    func calCancelEditor() {
+        calendarScreen.eventEditor = nil
+        selectedEventID = nil
+    }
+
+    @discardableResult
+    func calSaveEditor(_ draft: CalEventDraft, startFocus: Bool = false) -> Bool {
+        guard draft.isEditable, draft.isValid else { return false }
+        var edited = draft.event
+        edited.title = edited.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let saved = draft.isNew ? addEvent(edited) : updateEvent(edited)
+        guard let saved else { return false }
+        calendarDate = saved.start
+        calCancelEditor()
+        if startFocus { self.startFocus(from: saved) }
+        return true
+    }
+
+    var calVisibleEvents: [CalendarEvent] { calendarScreen.planningEvents(events) }
 
     // MARK: Editing
 
@@ -50,7 +72,7 @@ extension AppStore {
                       slot.addingTimeInterval(length) <= calendar.date(bySettingHour: endHour, minute: 0, second: 0, of: day)!
                 else { continue }
                 let end = slot.addingTimeInterval(length)
-                let clash = events.contains { $0.kind != .deadline && $0.start < end && $0.end > slot }
+                let clash = events.contains { $0.kind != .deadline && $0.kind != .focusLogged && $0.start < end && $0.end > slot }
                 if !clash { return slot }
             }
         }
@@ -60,21 +82,26 @@ extension AppStore {
     /// "+ New event": a study block at the next free hour, opened for editing.
     @discardableResult
     func calNewEvent() -> CalendarEvent {
-        let start = calNextFreeSlot(after: now) ?? calendar.date(byAdding: .hour, value: 1, to: now)!
+        let opening = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: calendarDate)!
+        let searchStart = calendar.isDate(calendarDate, inSameDayAs: now) ? max(opening, now) : opening
+        let free = calNextFreeSlot(after: searchStart)
+        let start = free.flatMap { calendar.isDate($0, inSameDayAs: calendarDate) ? $0 : nil } ?? opening
         let event = CalendarEvent(
             title: "New event", start: start, end: start.addingTimeInterval(3600),
             kind: .studyPlanned, source: .bt, runAsFocus: true, focusPlan: "50/10"
         )
-        addEvent(event)
-        if calendarMode == .month { calendarMode = .week }
-        calendarDate = start
-        selectedEventID = event.id
+        calendarScreen.eventEditor = CalEventDraft(event: event, isNew: true)
         return event
     }
 
     // MARK: Week BT bar
 
-    var calDraftEvent: CalendarEvent? { event(CalDraftReview.draftID) }
+    /// The block under review, else the earliest BT draft in the week shown.
+    var calDraftEvent: CalendarEvent? {
+        if let before = calendarScreen.draft.before { return event(before.id) }
+        let week = calendar.dateInterval(of: .weekOfYear, for: calendarDate)
+        return events.filter { $0.kind == .btDraft && week?.contains($0.start) == true }.min { $0.start < $1.start }
+    }
 
     func calKeepDraft() {
         calResolveDraft(.kept) { e in
@@ -115,16 +142,21 @@ extension AppStore {
 
     // MARK: Day
 
-    /// Inserts BT's drafted block; `edit` opens it inline.
+    /// Adds the proposal, or opens an unsaved copy for editing.
     func calAddDayDraft(_ draft: CalDayDraft, edit: Bool = false) {
         let e = CalendarEvent(
             title: draft.title, start: draft.start, end: draft.end, kind: .studyPlanned, source: .bt,
             runAsFocus: true, focusPlan: draft.focusPlan
         )
-        addEvent(e)
+        if edit {
+            calendarScreen.eventEditor = CalEventDraft(event: e, isNew: true)
+            selectedEventID = e.id
+            calendarScreen.dayPanel = nil
+            return
+        }
+        guard let saved = addEvent(e) else { return }
         calendarScreen.dayDraft = draft
-        calendarScreen.dayDraftAddedID = e.id
-        if edit { selectedEventID = e.id }
+        calendarScreen.dayDraftAddedID = saved.id
     }
 
     func calUndoDayDraft() {
@@ -132,14 +164,13 @@ extension AppStore {
         calendarScreen.dayDraftAddedID = nil
     }
 
-    /// "+ Fill with study": an hour-long study block at the start of the gap, opened inline.
+    /// Opens an unsaved study block at the start of the gap.
     func calFillGap(at start: Date) {
         let e = CalendarEvent(
             title: "Study block", start: start, end: start.addingTimeInterval(3600),
             kind: .studyPlanned, source: .bt, runAsFocus: true, focusPlan: "2×25"
         )
-        addEvent(e)
-        selectedEventID = e.id
+        calendarScreen.eventEditor = CalEventDraft(event: e, isNew: true)
     }
 
     // MARK: Month look-ahead
@@ -148,7 +179,7 @@ extension AppStore {
     func calDraftLookAhead() {
         guard calendarScreen.monthDraftIDs.isEmpty else { return }
         let drafts = CalMonthMath.lookAheadDrafts(now: now, cal: calendar)
-        drafts.forEach(addEvent)
+        drafts.forEach { addEvent($0) }
         calendarScreen.monthDraftIDs = drafts.map(\.id)
         calendarScreen.monthLayers.insert(.study)
     }

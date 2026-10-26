@@ -41,6 +41,15 @@ struct FocusLog {
         try context.save()
     }
 
+    func sessions(in interval: DateInterval) -> [FocusSession] {
+        let (from, to) = (interval.start, interval.end)
+        let descriptor = FetchDescriptor<FocusSession>(
+            predicate: #Predicate { $0.end >= from && $0.end < to },
+            sortBy: [SortDescriptor(\.start)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
     /// Sessions count toward the day they ended on.
     func totalFocused(on day: Date, calendar: Calendar = .current) -> TimeInterval {
         totalFocused(lastDays: 1, endingOn: day, calendar: calendar)

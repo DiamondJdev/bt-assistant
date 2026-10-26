@@ -32,7 +32,7 @@ struct CalDayDraft: Equatable {
         text = text.trimmingCharacters(in: .whitespaces)
         let title = text.isEmpty ? "Study block" : text.prefix(1).uppercased() + text.dropFirst()
 
-        let dayEvents = events.filter { cal.isDate($0.start, inSameDayAs: day) && $0.kind != .deadline }
+        let dayEvents = events.filter { cal.isDate($0.start, inSameDayAs: day) && $0.kind != .deadline && $0.kind != .focusLogged }
         let after = anchor.flatMap { a in dayEvents.sorted { $0.start < $1.start }.first { words($0.title).isSuperset(of: words(a)) } }
         let start: Date
         let why: String
@@ -59,7 +59,8 @@ struct CalDayDraft: Equatable {
     /// Earliest quarter hour from 8 AM (or now) with `minutes` free before 11 PM.
     private static func firstOpening(day: Date, now: Date, events: [CalendarEvent], minutes: Double, cal: Calendar) -> Date {
         let open = cal.date(bySettingHour: 8, minute: 0, second: 0, of: day)!
-        var t = max(open, now)
+        let earliest = cal.isDate(day, inSameDayAs: now) ? max(open, now) : open
+        var t = earliest
         let q = 15.0 * 60
         t = Date(timeIntervalSinceReferenceDate: (t.timeIntervalSinceReferenceDate / q).rounded(.up) * q)
         let bed = cal.date(bySettingHour: 23, minute: 0, second: 0, of: day)!
@@ -68,7 +69,7 @@ struct CalDayDraft: Equatable {
             guard let clash = events.first(where: { $0.start < end && $0.end > t }) else { return t }
             t = clash.end
         }
-        return max(open, now)
+        return earliest
     }
 }
 
@@ -110,10 +111,27 @@ enum CalDayRow: Identifiable, Equatable {
     /// Free time from the end of the last block (or now) until bed, if at least 30 min.
     static func gap(day: Date, now: Date, events: [CalendarEvent], cal: Calendar) -> (start: Date, hours: Double)? {
         let bed = cal.date(bySettingHour: bedHour, minute: 0, second: 0, of: day)!
-        let lastEnd = events.filter { $0.kind != .deadline }.map(\.end).max() ?? cal.date(bySettingHour: 8, minute: 0, second: 0, of: day)!
+        let lastEnd = events.filter { $0.kind != .deadline && $0.kind != .focusLogged }.map(\.end).max() ?? cal.date(bySettingHour: 8, minute: 0, second: 0, of: day)!
         let start = max(lastEnd, cal.isDate(day, inSameDayAs: now) ? now : lastEnd)
         let hours = bed.timeIntervalSince(start) / 3600
         return hours >= 0.5 ? (start, hours) : nil
+    }
+}
+
+struct CalDaySections {
+    var earlier: [CalDayRow] = []
+    var upcoming: [CalDayRow] = []
+    var deadlines: [CalendarEvent] = []
+
+    init(day: Date, now: Date, events: [CalendarEvent], cal: Calendar) {
+        let today = cal.isDate(day, inSameDayAs: now)
+        for row in CalDayRow.rows(day: day, now: now, events: events, cal: cal) {
+            switch row {
+            case let .due(event): deadlines.append(event)
+            case .event(_, isPast: true) where today: earlier.append(row)
+            default: upcoming.append(row)
+            }
+        }
     }
 }
 
@@ -131,7 +149,7 @@ struct CalHoursBreakdown: Equatable {
     init(day: Date, events: [CalendarEvent], cal: Calendar) {
         let lo = cal.date(bySettingHour: Self.windowStart, minute: 0, second: 0, of: day)!
         let hi = cal.date(bySettingHour: Self.windowEnd, minute: 0, second: 0, of: day)!
-        for e in events where e.kind != .deadline {
+        for e in events where e.kind != .deadline && e.kind != .focusLogged {
             let h = max(0, min(e.end, hi).timeIntervalSince(max(e.start, lo))) / 3600
             switch e.kind {
             case .classSession: classHours += h

@@ -8,7 +8,7 @@ enum CalMonthMath {
     static func load(day: Date, events: [CalendarEvent], cal: Calendar) -> Double {
         let lo = cal.date(bySettingHour: Int(CalTimeline.startHour), minute: 0, second: 0, of: day)!
         let hi = cal.date(bySettingHour: Int(CalTimeline.endHour), minute: 0, second: 0, of: day)!
-        let hours = events.filter { $0.kind != .deadline }.reduce(0.0) { sum, e in
+        let hours = events.filter { $0.kind != .deadline && $0.kind != .focusLogged }.reduce(0.0) { sum, e in
             sum + max(0, min(e.end, hi).timeIntervalSince(max(e.start, lo))) / 3600
         }
         return min(1, hours / CalTimeline.span)

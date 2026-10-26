@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor
 @Observable
-public final class CodingModule: ToolModule {
+public final class CodingModule: ToolModule, CodeActivitySource {
     public let id = "coding"
     public let name = "Coding"
     public let symbol = "chevron.left.forwardslash.chevron.right"
@@ -88,6 +88,23 @@ public final class CodingModule: ToolModule {
         let now = now()
         guard let last = sessions(on: now).last, now.timeIntervalSince(last.end) <= codingIdleCutoff else { return nil }
         return last
+    }
+
+    public func projects(since start: Date) -> [Project] {
+        let byProject = Dictionary(grouping: sessions(from: start, to: now() + 60)) { $0.project.lowercased() }
+        return byProject.map { id, sessions in
+            let byLanguage = Dictionary(grouping: sessions, by: \.language).mapValues { $0.reduce(0) { $0 + $1.duration } }
+            return Project(
+                id: id, name: sessions[0].project, path: "",
+                stack: byLanguage.max { $0.value < $1.value }?.key ?? "",
+                activity: sessions.map { CodingActivity(start: $0.start, end: $0.end, projectID: id, source: .manual) }
+            )
+        }
+        .sorted { total($0) > total($1) }
+    }
+
+    private func total(_ project: Project) -> TimeInterval {
+        project.activity.reduce(0) { $0 + $1.duration }
     }
 
     public var snapshot: String? {

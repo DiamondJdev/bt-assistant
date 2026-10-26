@@ -4,14 +4,17 @@ import SwiftUI
 struct CodeHeadCell: View {
     let project: Project
     let week: CodeWeek
+    let edit: () -> Void
 
     var body: some View {
-        let copy = CodeSampleCopy.copy(for: project.id)
         GeometryReader { g in
             let left = (g.size.width - 32) / 2.25
             HStack(alignment: .bottom, spacing: 32) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(pathLine).monoLabel().lineLimit(1)
+                    HStack(spacing: 16) {
+                        Text(pathLine).monoLabel().lineLimit(1)
+                        Button("Edit project", action: edit).buttonStyle(.monoLink).fixedSize()
+                    }
                     Text(project.name)
                         .interStyle(80, .medium, tracking: -0.055)
                         .lineLimit(1)
@@ -20,13 +23,13 @@ struct CodeHeadCell: View {
                     HStack(spacing: 32) {
                         stat(CodeWeek.duration(minutes: week.weekMinutes), "This week")
                         stat(streak, "Streak")
-                        stat(copy.commits, "Commits")
+                        stat(week.averageMinutes.map { CodeWeek.duration(minutes: $0) } ?? "—", "Weekly avg")
                     }
                 }
                 .frame(width: left, alignment: .leading)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("BT · \(project.name) this week").monoLabel()
-                    summary(copy.clauses)
+                    summary(CodeSummary.clauses(project: project, week: week))
                         .font(.inter(24, .medium))
                         .tracking(24 * -0.02)
                         .lineSpacing(3)
@@ -46,7 +49,7 @@ struct CodeHeadCell: View {
 
     /// "Swift · ~/dev/bt-client · main"
     private var pathLine: String {
-        ([project.stack, project.path] + (project.branch.map { [$0] } ?? [])).joined(separator: " · ")
+        ([project.stack, project.path] + (project.branch.map { [$0] } ?? [])).filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var streak: String {

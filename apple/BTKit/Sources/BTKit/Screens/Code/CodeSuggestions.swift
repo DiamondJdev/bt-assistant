@@ -41,7 +41,7 @@ enum CodeSuggestions {
     static func make(for project: Project, week: CodeWeek, events: [CalendarEvent]) -> [CodeSuggestion] {
         let book = booking(for: project, week: week, booked: bookedMinutes(project, week: week, events: events))
         if project.stages.isEmpty {
-            let draft = CodeSuggestion(title: "Draft a roadmap from the repo", label: "Draft", doneLabel: "Drafted ✓", action: .draftRoadmap)
+            let draft = CodeSuggestion(title: "Draft a roadmap from the README", label: "Draft", doneLabel: "Drafted ✓", action: .draftRoadmap)
             return [draft, book]
         }
         if project.weeklyGoalHours == nil {
@@ -116,24 +116,41 @@ extension AppStore {
         case .weeklyGoal(let hours):
             projects[i].weeklyGoalHours = hours
         case .draftRoadmap:
-            sendToBT("Draft a roadmap for \(projects[i].name) from the repo’s README and open issues.")
+            Task { await draftRoadmap(projectID: projectID) }
+            return
         }
         code.accepted[projectID, default: [:]][slot] = suggestion
     }
 
-    /// Adds a placeholder project for a repo path and selects it. Returns false for a blank path.
+    /// Tracks a repo folder and selects it. A heartbeat project with the folder's name and no path gets
+    /// the folder; otherwise a new project is added. Returns false for a blank or already tracked path.
     @discardableResult
-    func trackRepo(path: String) -> Bool {
+    func trackRepo(path: String, bookmark: Data? = nil) -> Bool {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = trimmed.split(separator: "/").last.map(String.init) ?? ""
         guard !name.isEmpty, name != "~" else { return false }
+        let standard = (trimmed as NSString).standardizingPath
+        if let tracked = projects.first(where: { !$0.path.isEmpty && ($0.path as NSString).standardizingPath == standard }) {
+            selectedProjectID = tracked.id
+            return false
+        }
+        if let i = projects.firstIndex(where: { $0.id == name.lowercased() && $0.path.isEmpty }) {
+            projects[i].path = trimmed
+            projects[i].bookmark = bookmark
+            selectedProjectID = projects[i].id
+            return true
+        }
         var id = name.lowercased()
         var n = 2
         while project(id) != nil {
             id = "\(name.lowercased())-\(n)"
             n += 1
         }
-        projects.append(Project(id: id, name: name, path: trimmed, stack: "—"))
+        hiddenProjectIDs.remove(id)
+        projects.append(Project(id: id, name: name, path: trimmed, stack: "—", bookmark: bookmark))
+        // Pick up activity a hidden project collected while it was removed.
+        loadedCode = nil
+        reloadProjectsIfNeeded()
         selectedProjectID = id
         return true
     }

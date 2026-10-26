@@ -39,6 +39,10 @@ public final class PomodoroModule: ToolModule {
     }
 
     public let nowPlaying: (any NowPlayingSource)?
+    /// Names the work phases logged from now on, e.g. the calendar block Focus started from.
+    public var label: String?
+    /// Bumps each time a work phase is logged.
+    public private(set) var logToken = 0
 
     @ObservationIgnored private let log: FocusLog
     @ObservationIgnored private let defaults: UserDefaults
@@ -88,6 +92,27 @@ public final class PomodoroModule: ToolModule {
         start()
     }
 
+    /// Starts a work phase of `length`, ending any other active or waiting phase first.
+    public func startWork(length: TimeInterval) {
+        if state.phase != .work || state.isRunning || state.isPaused {
+            finish(state.switched(to: .work, at: now()))
+            enqueue { await $0.cancelAll() }
+        }
+        var custom = durations
+        custom.work = length
+        state = state.started(at: now(), durations: custom)
+        scheduleNotification()
+    }
+
+    /// "+5 min": lengthens the running or paused phase.
+    public func extend(by seconds: TimeInterval) {
+        guard state.isRunning || state.isPaused else { return }
+        state = state.extended(by: seconds)
+        guard state.isRunning else { return }
+        enqueue { await $0.cancelAll() }
+        scheduleNotification()
+    }
+
     public func pause() {
         guard state.isRunning else { return }
         state = state.paused(at: now())
@@ -120,6 +145,12 @@ public final class PomodoroModule: ToolModule {
 
     public var todayFocused: TimeInterval {
         log.totalFocused(on: now())
+    }
+
+    /// Logged work phases that ended inside `interval`.
+    func loggedSessions(in interval: DateInterval) -> [(FocusInterval, label: String?)] {
+        _ = logToken
+        return log.sessions(in: interval).map { (FocusInterval(start: $0.start, end: $0.end), $0.label) }
     }
 
     public func remaining() -> TimeInterval? {
@@ -214,7 +245,8 @@ public final class PomodoroModule: ToolModule {
     private func finish(_ result: (PomodoroState, FocusInterval?)) {
         if let interval = result.1 {
             do {
-                try log.record(interval, label: nil)
+                try log.record(interval, label: label)
+                logToken += 1
             } catch {
                 Self.logger.error("Could not log focus session: \(error.localizedDescription)")
             }

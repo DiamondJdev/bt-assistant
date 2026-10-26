@@ -92,9 +92,11 @@ extension AppStore {
     /// Booked block, if it still exists (Calendar may have deleted it).
     var todayBookedEvent: CalendarEvent? { today.bookedEventID.flatMap(event) }
 
-    /// NOW row for the focus session, then events still to come today.
+    /// All-day events, the NOW row for the focus session, then events still to come today.
     var todayAgenda: [AgendaRow] {
-        var rows: [AgendaRow] = []
+        var rows = allDayEvents(on: now).map {
+            AgendaRow(id: $0.id, time: "ALL DAY", title: $0.title, meta: $0.source.rawValue.uppercased())
+        }
         if focus.remainingSeconds > 0 {
             let title = focus.mode == .focus ? "Focus — \(TodayFormat.lowercasedFirst(focus.taskTitle))" : "Break"
             rows.append(AgendaRow(id: "now", time: "NOW", title: title, meta: "→ \(focus.clock)", isHot: true))

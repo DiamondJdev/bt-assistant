@@ -30,10 +30,12 @@ struct HardStopCell: View {
     }
 }
 
-/// Checklist bound to the session's goals.
+/// Checklist bound to the session's goals, with a field to add one.
 struct SessionGoalsCell: View {
     @Binding var goals: [SessionGoal]
     let label: String
+    let add: (String) -> Void
+    @State private var draft = ""
 
     var body: some View {
         GridCell("Goal for this session", meta: { Text(label) }) {
@@ -41,6 +43,14 @@ struct SessionGoalsCell: View {
                 ForEach($goals) { $goal in
                     GoalRow(goal: goal) { goal.isDone.toggle() }
                 }
+                TextField("Add a goal", text: $draft)
+                    .textFieldStyle(.plain)
+                    .frame(minHeight: 32)
+                    .onSubmit {
+                        add(draft)
+                        draft = ""
+                    }
+                    .accessibilityLabel("Add a goal for this session")
             }
         }
     }
