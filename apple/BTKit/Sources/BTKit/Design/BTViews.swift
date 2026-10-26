@@ -167,13 +167,13 @@ public struct EventBlockView: View {
 
     @ViewBuilder private var border: some View {
         switch kind {
-        case .work:
+        case .work, .classSession:
             Rectangle().strokeBorder(Color.btSubtle, lineWidth: 1)
         case .studyPlanned:
             Rectangle().strokeBorder(Color.btInk, style: StrokeStyle(lineWidth: 1.5, dash: BTMetrics.dash))
         case .btDraft:
             Rectangle().strokeBorder(Color.btAccent, style: StrokeStyle(lineWidth: 1.5, dash: BTMetrics.dash))
-        case .classSession, .focusLogged, .deadline:
+        case .focusLogged, .deadline:
             EmptyView()
         }
     }

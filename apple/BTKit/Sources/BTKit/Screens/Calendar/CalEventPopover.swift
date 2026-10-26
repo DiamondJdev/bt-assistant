@@ -1,102 +1,147 @@
 import SwiftUI
 
-/// Week's edit popover: title, time, ±30 nudge, Run as Focus, Save / Start focus now / Delete.
-struct CalEventPopover: View {
+struct CalEventEditor: View {
     @Bindable var store: AppStore
-    let event: CalendarEvent
-
-    private var cal: Calendar { store.calendar }
+    @State var draft: CalEventDraft
+    @State private var saveError: String?
+    @State private var confirmDelete = false
 
     var body: some View {
-        PaperCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Edit · \(CalFormat.kindLabel(event.kind))").monoLabel(10)
-                    Spacer()
-                    Button { store.selectedEventID = nil } label: {
-                        Image(systemName: "xmark").font(.system(size: 13)).frame(width: 28, height: 28).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close")
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(draft.isNew ? "New event" : draft.isEditable ? "Edit event" : "Event details")
+                    .interStyle(28, .medium, tracking: -0.035)
+                Spacer()
+                Button { store.calCancelEditor() } label: {
+                    Image(systemName: "xmark").frame(width: 28, height: 28)
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Title").font(.inter(11)).foregroundStyle(Color.btMuted)
-                    TextField("Title", text: titleBinding)
-                        .textFieldStyle(.plain)
-                        .font(.inter(16, .medium))
-                        .frame(height: 34)
-                        .overlay(alignment: .bottom) { Rectangle().fill(Color.btInk).frame(height: 1.5) }
-                }
-                HStack(alignment: .top, spacing: 10) {
-                    field("When") {
-                        Text(CalFormat.string(event.start, "EEE", cal) + " " + CalFormat.range(event.start, event.end, cal))
-                            .font(.inter(13))
-                            .padding(.horizontal, 8)
-                            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                            .background(Color.white)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(BTMetrics.cellPadding)
+            .dashedEdges(right: false, bottom: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Title").monoLabel()
+                        TextField("Event title", text: $draft.event.title)
+                            .textFieldStyle(.plain)
+                            .font(.inter(22, .medium))
+                            .padding(12)
+                            .background(Color.btPaper)
                             .overlay(Rectangle().strokeBorder(Color.btLine, lineWidth: 1))
-                    }
-                    field("Nudge") {
-                        HStack(spacing: 4) {
-                            nudge("−30", minutes: -30)
-                            nudge("+30", minutes: 30)
+                            .accessibilityLabel("Title")
+                            .disabled(!draft.isEditable)
+                        Text(CalFormat.sourceLabel(draft.event))
+                            .font(.mono(11))
+                            .foregroundStyle(Color.btMuted)
+                        if let location = draft.event.location, !location.isEmpty {
+                            Label(location, systemImage: "mappin.and.ellipse")
+                                .font(.inter(13))
+                                .foregroundStyle(Color.btMuted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Time window").monoLabel()
+                        DatePicker("Date", selection: startBinding, displayedComponents: .date)
+                        DatePicker("Starts", selection: startBinding, displayedComponents: .hourAndMinute)
+                        DatePicker("Ends", selection: $draft.event.end, displayedComponents: [.date, .hourAndMinute])
+                    }
+                    .datePickerStyle(.field)
+                    .disabled(!draft.isEditable)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Duration").monoLabel()
+                            Spacer()
+                            Text(CalFormat.hours(draft.event.duration / 3600)).font(.mono(13))
+                        }
+                        if draft.isEditable {
+                            HStack(spacing: 8) {
+                                ForEach([15, 30, 45, 60, 90], id: \.self) { minutes in
+                                    Button("\(minutes)m") { draft.setDuration(minutes: minutes) }
+                                        .buttonStyle(.pill(.secondary, size: .small))
+                                        .accessibilityLabel("Set duration to \(minutes) minutes")
+                                }
+                            }
+                        }
+                    }
+                    if draft.isEditable {
+                        Toggle("Run as Focus session", isOn: $draft.event.runAsFocus)
+                            .toggleStyle(CalCheckboxStyle())
+                            .onChange(of: draft.event.runAsFocus) { _, enabled in
+                                if enabled, draft.event.focusPlan == nil { draft.event.focusPlan = "50/10" }
+                            }
+                    }
+                    if !draft.isValid {
+                        Text("Enter a title and an end time after the start.")
+                            .font(.inter(13)).foregroundStyle(Color.btAccentDeep)
+                    }
+                    if let saveError {
+                        Text(saveError).font(.inter(13)).foregroundStyle(Color.btAccentDeep)
+                            .accessibilityLabel("Could not save. \(saveError)")
+                    }
                 }
-                Toggle(isOn: focusBinding) {
-                    Text("Run as Focus session ").font(.inter(13))
-                        + Text("· \(planLabel)").font(.inter(13)).foregroundStyle(Color.btMuted)
+                .font(.inter(14))
+                .padding(BTMetrics.cellPadding)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                if draft.isEditable, draft.event.runAsFocus {
+                    Button("Save & start focus") { save(startFocus: true) }
+                        .buttonStyle(.pill(.secondary))
+                        .disabled(!draft.isValid)
                 }
-                .toggleStyle(CalCheckboxStyle(accent: true, trailing: true))
-                HStack(spacing: 8) {
-                    Button("Save") { store.selectedEventID = nil }.buttonStyle(.pill(.primary))
-                    Button("Start focus now") { store.startFocus(from: event) }.buttonStyle(.pill(.secondary))
-                    Spacer(minLength: 0)
-                    Button("Delete") { store.deleteEvent(event.id) }
-                        .buttonStyle(.plain)
-                        .font(.inter(13))
-                        .underline()
-                        .foregroundStyle(Color.btAccentDeep)
-                        .frame(minHeight: 36)
+                HStack(spacing: 10) {
+                    if !draft.isNew, draft.isEditable {
+                        Button("Delete", role: .destructive) { confirmDelete = true }
+                            .buttonStyle(.plain)
+                            .font(.inter(13, .medium))
+                            .foregroundStyle(Color.btAccentText)
+                    }
+                    Spacer()
+                    Button(draft.isEditable ? "Cancel" : "Done") { store.calCancelEditor() }
+                        .buttonStyle(.pill(.secondary))
+                    if draft.isEditable {
+                        Button("Save") { save() }
+                            .buttonStyle(.pill(.primary))
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(!draft.isValid)
+                    }
+                }
+            }
+            .padding(BTMetrics.cellPadding)
+            .dashedEdges(right: false, bottom: false, top: true)
+        }
+        .frame(width: 540, height: 620)
+        .background(Color.btGround)
+        .foregroundStyle(Color.btInk)
+        .tint(Color.btAccent)
+        .environment(\.colorScheme, .light)
+        .environment(\.calendar, store.calendar)
+        .environment(\.timeZone, store.calendar.timeZone)
+        .confirmationDialog("Delete this event?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete event", role: .destructive) {
+                if store.deleteEvent(draft.event.id) != nil {
+                    store.calCancelEditor()
+                } else {
+                    saveError = store.calendarError ?? "This event is no longer available."
                 }
             }
         }
-        .foregroundStyle(Color.btInk)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Edit event")
     }
 
-    private var planLabel: String {
-        (event.focusPlan ?? "50/10").replacingOccurrences(of: "/", with: " / ")
+    private var startBinding: Binding<Date> {
+        Binding(get: { draft.event.start }, set: { draft.moveStart(to: $0) })
     }
 
-    private var titleBinding: Binding<String> {
-        Binding(get: { store.event(event.id)?.title ?? event.title }, set: { store.calSetTitle(event.id, $0) })
-    }
-
-    private var focusBinding: Binding<Bool> {
-        Binding(get: { store.event(event.id)?.runAsFocus ?? false }, set: { store.calSetRunAsFocus(event.id, $0) })
-    }
-
-    private func field<C: View>(_ label: String, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.inter(11)).foregroundStyle(Color.btMuted)
-            content()
+    private func save(startFocus: Bool = false) {
+        if !store.calSaveEditor(draft, startFocus: startFocus) {
+            saveError = store.calendarError ?? "This event is no longer available. Close and reopen it."
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func nudge(_ label: String, minutes: Int) -> some View {
-        Button { store.calNudge(event.id, minutes: minutes) } label: {
-            Text(label).font(.inter(12))
-                .frame(maxWidth: .infinity, minHeight: 32)
-                .overlay(Rectangle().strokeBorder(Color.btInk, lineWidth: 1))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(minutes < 0 ? "30 minutes earlier" : "30 minutes later")
     }
 }
+
 
 /// Square checkbox drawn in the Sand Grid style (ImageRenderer-safe, unlike the AppKit one).
 struct CalCheckboxStyle: ToggleStyle {

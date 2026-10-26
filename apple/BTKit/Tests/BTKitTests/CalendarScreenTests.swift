@@ -34,6 +34,18 @@ struct CalendarScreenTests {
         #expect(CalTimeline.isVisible(Self.thursday, Self.cal))
     }
 
+    @Test func overlappingBlocksShareTheColumnInLanes() {
+        func ev(_ id: String, _ from: Int, _ to: Int) -> CalendarEvent {
+            CalendarEvent(id: id, title: id, start: Self.at(22, from), end: Self.at(22, to), kind: .work, source: .google)
+        }
+        // A and B overlap, C starts when A ends so it reuses A's lane; D stands alone.
+        let lanes = CalTimeline.lanes([ev("C", 11, 13), ev("A", 9, 11), ev("D", 14, 15), ev("B", 10, 12)])
+        #expect(lanes["A"]! == (0, 2))
+        #expect(lanes["B"]! == (1, 2))
+        #expect(lanes["C"]! == (0, 2))
+        #expect(lanes["D"]! == (0, 1))
+    }
+
     // MARK: Dates
 
     @Test func weekStartsMonday() {
@@ -107,8 +119,9 @@ struct CalendarScreenTests {
         // 1–7 PM is taken by Discrete Math, HW 6, SI and the draft.
         #expect(e.start == Self.at(22, 19))
         #expect(e.kind == .studyPlanned)
-        #expect(store.selectedEventID == e.id)
-        #expect(store.calendarMode == .week)
+        #expect(store.calendarScreen.eventEditor?.id == e.id)
+        #expect(store.event(e.id) == nil)
+        #expect(store.calendarMode == .month)
     }
 
     @Test func nudgeKeepsLength() {
@@ -132,6 +145,16 @@ struct CalendarScreenTests {
         store.calUndoDraft()
         #expect(store.event("draft") == before)
         #expect(store.calendarScreen.draft.outcome == .pending)
+    }
+
+    @Test func barProposesTheFirstDraftInTheShownWeek() {
+        let store = makeStore()
+        store.deleteEvent("draft")
+        #expect(store.calDraftEvent == nil)
+        store.calDraftLookAhead()
+        #expect(store.calDraftEvent == nil)
+        store.calStep(1)
+        #expect(store.calDraftEvent?.title == "HW 7")
     }
 
     @Test func moveLaterShiftsAnHour() {
@@ -178,7 +201,7 @@ struct CalendarScreenTests {
         let store = makeStore()
         let before = CalHoursBreakdown(day: Self.thursday, events: store.events(on: Self.thursday), cal: Self.cal)
         #expect(abs(before.classHours - 4.75) < 0.01)
-        #expect(abs(before.focusHours - (50.0 / 60 + 1)) < 0.01)
+        #expect(abs(before.focusHours - (1 + 0.83)) < 0.01)
         #expect(abs(before.openHours - (14 - before.classHours - before.focusHours)) < 0.01)
         let lab = { CalDueSoon.list(now: Self.thursday, events: store.events).first { $0.deadline.id == "due-lab" } }
         #expect(lab()?.booked.isEmpty == true)
@@ -194,11 +217,13 @@ struct CalendarScreenTests {
         #expect(lab()?.booked.isEmpty == true)
     }
 
-    @Test func editDetailsOpensTheBlockInline() {
+    @Test func editDetailsOpensAnUnsavedDraft() {
         let store = makeStore()
         let d = CalDayDraft.parse(CalDayDraft.defaultPrompt, day: Self.thursday, now: Self.thursday, events: store.events, cal: Self.cal)
         store.calAddDayDraft(d, edit: true)
-        #expect(store.selectedEventID == store.calendarScreen.dayDraftAddedID)
+        #expect(store.calendarScreen.eventEditor?.event.title == d.title)
+        #expect(store.calendarScreen.eventEditor?.isNew == true)
+        #expect(store.calendarScreen.dayDraftAddedID == nil)
     }
 
     @Test func dayRowsPutNowGapAndDueInOrder() {
@@ -220,7 +245,7 @@ struct CalendarScreenTests {
     @Test func loadBarIsBookedShareOfTheDay() {
         let store = makeStore()
         let thu = CalMonthMath.load(day: Self.thursday, events: store.events(on: Self.thursday), cal: Self.cal)
-        #expect(abs(thu - (4.75 + 50.0 / 60 + 1) / 14) < 0.01)
+        #expect(abs(thu - (4.75 + 1 + 0.83) / 14) < 0.01)
         let sat = CalMonthMath.load(day: Self.at(24, 0), events: store.events(on: Self.at(24, 0)), cal: Self.cal)
         #expect(abs(sat - 8.0 / 14) < 0.01)
         #expect(CalMonthMath.load(day: Self.at(5, 0), events: [], cal: Self.cal) == 0)

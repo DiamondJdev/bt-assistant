@@ -18,7 +18,7 @@ struct CalWeekSidebar: View {
     private var layers: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Calendars").monoLabel()
-            ForEach(CalWeekLayer.allCases, id: \.self) { layer in
+            ForEach(CalWeekLayer.allCases.filter { $0 != .focus }, id: \.self) { layer in
                 CalLayerRow(layer: layer, state: store.calendarScreen)
             }
         }

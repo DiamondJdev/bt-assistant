@@ -20,9 +20,10 @@ struct CalMonthPanel: View {
     private var selectedDay: some View {
         let day = store.calendarDate
         let isToday = cal.isDate(day, inSameDayAs: store.now)
-        let items = CalLayers.visible(store.events(on: day), showing: store.calendarScreen.monthLayers)
+        let items = CalLayers.visible(store.calendarScreen.planningEvents(store.events(on: day)), showing: store.calendarScreen.monthLayers)
         let timed = items.filter { $0.kind != .deadline }
         let dues = items.filter { $0.kind == .deadline }
+        let allDay = store.allDayEvents(on: day)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(CalFormat.string(day, "EEE d", cal) + (isToday ? " · today" : "")).monoLabel()
@@ -33,7 +34,10 @@ struct CalMonthPanel: View {
                 .buttonStyle(.monoLink)
             }
             VStack(alignment: .leading, spacing: 0) {
-                if items.isEmpty {
+                ForEach(allDay) { e in
+                    itemRow(e, text: "All day  \(e.title)", accent: false)
+                }
+                if items.isEmpty && allDay.isEmpty {
                     Text("Nothing on this day with the current layers.").foregroundStyle(Color.btMuted).padding(.vertical, 8)
                 }
                 ForEach(timed) { e in
@@ -47,14 +51,19 @@ struct CalMonthPanel: View {
     }
 
     private func itemRow(_ e: CalendarEvent, text: String, accent: Bool) -> some View {
-        HStack(spacing: 10) {
-            CalSwatch(kind: e.kind, size: 9).frame(width: 16, alignment: .leading)
-            Text(text).font(.inter(14, accent ? .semibold : .medium))
-                .foregroundStyle(accent ? Color.btAccentDeep : .btInk).lineLimit(1)
+        Button { store.calSelect(e.id) } label: {
+            HStack(spacing: 10) {
+                CalSwatch(kind: e.kind, size: 9).frame(width: 16, alignment: .leading)
+                Text(text).font(.inter(14, accent ? .semibold : .medium))
+                    .foregroundStyle(accent ? Color.btAccentDeep : .btInk).lineLimit(1)
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.btRule).frame(height: 1) }
         }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.btRule).frame(height: 1) }
+        .buttonStyle(.plain)
+        .accessibilityHint("Open event details")
     }
 
     private var study: some View {

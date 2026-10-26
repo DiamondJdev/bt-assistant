@@ -8,33 +8,38 @@ public struct CalendarScreen: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            CalToolbar(store: store)
-                .dashedEdges(right: false, bottom: true)
+            if store.calendarMode == .week {
+                CalWeekToolbar(store: store)
+            } else {
+                CalToolbar(store: store)
+                    .dashedEdges(right: false, bottom: true)
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .sheet(item: Bindable(store.calendarScreen).eventEditor, onDismiss: { store.calCancelEditor() }) { draft in
+            CalEventEditor(store: store, draft: draft)
         }
     }
 
     @ViewBuilder private var content: some View {
         switch store.calendarMode {
         case .week:
-            SandGrid(columns: 4, rows: [1]) {
-                CalWeekSidebar(store: store)
-                    .dashedEdges(right: true, bottom: false)
-                    .gridCell(0, 0)
-                CalWeekGrid(store: store)
-                    .gridCell(1, 0, columns: 3)
-            }
+            CalWeekGrid(store: store)
         case .day:
-            SandGrid(columns: 4, rows: [1]) {
+            HStack(spacing: 0) {
                 CalDayAgenda(store: store)
-                    .dashedEdges(right: true, bottom: false)
-                    .gridCell(0, 0, columns: 2)
-                CalDayComposer(store: store)
-                    .dashedEdges(right: true, bottom: false)
-                    .gridCell(2, 0)
-                CalDayGlance(store: store)
-                    .gridCell(3, 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let panel = store.calendarScreen.dayPanel {
+                    ScrollView {
+                        switch panel {
+                        case .composer: CalDayComposer(store: store)
+                        case .summary: CalDayGlance(store: store)
+                        }
+                    }
+                    .frame(width: 340)
+                    .dashedEdges(right: false, bottom: false, left: true)
+                }
             }
         case .month:
             SandGrid(columns: 4, rows: [1]) {
@@ -54,6 +59,6 @@ public struct CalendarHeaderContext: View {
     public init(store: AppStore) { self.store = store }
 
     public var body: some View {
-        Text("Apple · Google — synced 1m ago")
+        Text(store.calendarStatus).lineLimit(1)
     }
 }

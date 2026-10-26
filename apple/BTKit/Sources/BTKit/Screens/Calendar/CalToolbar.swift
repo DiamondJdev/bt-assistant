@@ -5,21 +5,39 @@ struct CalToolbar: View {
     @Bindable var store: AppStore
 
     var body: some View {
-        HStack(spacing: 20) {
-            Text(title).interStyle(40, .medium, tracking: -0.045).lineLimit(1)
-            if store.calendarMode == .month {
-                CalMonthLayerPills(state: store.calendarScreen)
-            } else {
-                Text(meta).monoLabel().lineLimit(1)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 20) {
+                Text(title).interStyle(40, .medium, tracking: -0.045).lineLimit(1)
+                if store.calendarMode == .month {
+                    CalMonthLayerPills(state: store.calendarScreen)
+                } else {
+                    Text(meta).monoLabel().lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 6) {
+                    roundButton("‹", label: "Previous \(store.calendarMode.rawValue)") { store.calStep(-1) }
+                    Button("Today") { store.calGoToday() }.buttonStyle(.pill(.secondary))
+                    roundButton("›", label: "Next \(store.calendarMode.rawValue)") { store.calStep(1) }
+                }
+                CalModePicker(mode: $store.calendarMode)
+                Button("+ New event") { store.calNewEvent() }.buttonStyle(.pill(.cta))
             }
-            Spacer(minLength: 0)
-            HStack(spacing: 6) {
-                roundButton("‹", label: "Previous \(store.calendarMode.rawValue)") { store.calStep(-1) }
-                Button("Today") { store.calGoToday() }.buttonStyle(.pill(.secondary))
-                roundButton("›", label: "Next \(store.calendarMode.rawValue)") { store.calStep(1) }
+            HStack(spacing: 12) {
+                Toggle("Show focus history", isOn: Bindable(store.calendarScreen).showFocusHistory)
+                    .toggleStyle(CalCheckboxStyle(size: 16))
+                    .font(.inter(13))
+                Spacer()
+                if store.calendarMode == .day {
+                    Button(store.calendarScreen.dayPanel == .composer ? "Close BT planner" : "Plan with BT") {
+                        store.calendarScreen.dayPanel = store.calendarScreen.dayPanel == .composer ? nil : .composer
+                    }
+                    .buttonStyle(.pill(.secondary, size: .small))
+                    Button(store.calendarScreen.dayPanel == .summary ? "Close summary" : "Day summary") {
+                        store.calendarScreen.dayPanel = store.calendarScreen.dayPanel == .summary ? nil : .summary
+                    }
+                    .buttonStyle(.pill(.secondary, size: .small))
+                }
             }
-            CalModePicker(mode: $store.calendarMode)
-            Button("+ New event") { store.calNewEvent() }.buttonStyle(.pill(.cta))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -45,14 +63,14 @@ struct CalToolbar: View {
         case .week:
             let days = CalDates.weekDays(store.calendarDate, cal)
             let end = cal.date(byAdding: .day, value: 7, to: days[0])!
-            let week = store.events.filter { $0.start >= days[0] && $0.start < end && $0.kind != .deadline }
+            let week = store.events.filter { $0.start >= days[0] && $0.start < end && $0.kind != .deadline && $0.kind != .focusLogged }
             let n = cal.component(.weekOfYear, from: days[0])
             guard !week.isEmpty else { return "Week \(n) · nothing booked" }
             let booked = week.filter { $0.kind != .work }.reduce(0) { $0 + $1.duration } / 3600
             let study = week.filter { $0.kind != .work && $0.kind != .classSession }.reduce(0) { $0 + $1.duration } / 3600
             return "Week \(n) · \(Int(booked.rounded()))h booked · \(Int(study.rounded()))h study"
         case .day:
-            let day = store.events(on: store.calendarDate)
+            let day = store.calendarScreen.planningEvents(store.events(on: store.calendarDate))
             let due = day.filter { $0.kind == .deadline }.count
             return CalFormat.string(store.calendarDate, "MMMM", cal) + " · \(day.count - due) events · \(due) due"
         case .month:

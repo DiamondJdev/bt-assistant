@@ -103,6 +103,24 @@ public struct DueTag: View {
     }
 }
 
+/// An all-day event: ink outline on paper, set apart from the accent-filled `DueTag`.
+public struct AllDayTag: View {
+    let text: String
+    public init(_ text: String) { self.text = text }
+
+    public var body: some View {
+        Text(text)
+            .font(.inter(11, .medium))
+            .foregroundStyle(Color.btInk)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.btPaper)
+            .overlay(Rectangle().strokeBorder(Color.btInk, lineWidth: 1))
+    }
+}
+
 #Preview("Marks") {
     VStack(alignment: .leading, spacing: 24) {
         TickBar(filled: 19)

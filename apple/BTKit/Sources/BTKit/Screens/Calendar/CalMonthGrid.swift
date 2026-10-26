@@ -8,7 +8,7 @@ struct CalMonthGrid: View {
 
     var body: some View {
         let days = CalDates.monthGrid(store.calendarDate, cal)
-        let visible = CalLayers.visible(store.events, showing: store.calendarScreen.monthLayers)
+        let visible = CalLayers.visible(store.calVisibleEvents, showing: store.calendarScreen.monthLayers)
         let rows = days.count / 7
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -22,7 +22,8 @@ struct CalMonthGrid: View {
                 ForEach(0..<rows, id: \.self) { r in
                     HStack(spacing: 0) {
                         ForEach(days[(r * 7)..<(r * 7 + 7)], id: \.self) { day in
-                            CalMonthCell(store: store, day: day, events: visible.filter { cal.isDate($0.start, inSameDayAs: day) })
+                            CalMonthCell(store: store, day: day, events: visible.filter { cal.isDate($0.start, inSameDayAs: day) },
+                                         allDay: store.allDayEvents(on: day))
                         }
                     }
                 }
@@ -35,6 +36,7 @@ private struct CalMonthCell: View {
     @Bindable var store: AppStore
     let day: Date
     let events: [CalendarEvent]
+    let allDay: [CalendarEvent]
 
     var body: some View {
         let cal = store.calendar
@@ -69,7 +71,8 @@ private struct CalMonthCell: View {
                         }
                     }
                 if inMonth {
-                    ForEach(items.prefix(3)) { e in
+                    ForEach(allDay.prefix(2)) { AllDayTag($0.title) }
+                    ForEach(items.prefix(max(0, 3 - min(2, allDay.count)))) { e in
                         HStack(spacing: 6) {
                             CalSwatch(kind: e.kind)
                             Text(CalMonthMath.itemTitle(e)).font(.inter(11)).lineLimit(1)
@@ -91,8 +94,15 @@ private struct CalMonthCell: View {
         }
         .buttonStyle(.plain)
         .disabled(!inMonth)
-        .accessibilityLabel(CalFormat.string(day, "EEEE MMMM d", cal) + (due.map { ", \($0.title) due" } ?? "") + ", \(items.count) items")
+        .accessibilityLabel(accessibilityLabel(due: due, itemCount: items.count))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func accessibilityLabel(due: CalendarEvent?, itemCount: Int) -> String {
+        let date = CalFormat.string(day, "EEEE MMMM d", store.calendar)
+        let dueText = due.map { ", \($0.title) due" } ?? ""
+        let allDayText = allDay.map { ", \($0.title) all day" }.joined()
+        return date + dueText + allDayText + ", \(itemCount) items"
     }
 
     private func background(inMonth: Bool, isToday: Bool, isSelected: Bool) -> Color {
