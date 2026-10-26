@@ -103,3 +103,11 @@ def test_memories_lists_the_index_without_bodies(client, monkeypatch, tmp_path):
     assert entry['type'] == 'user'
     assert entry['updated']
     assert 'body' not in entry
+
+
+@pytest.mark.parametrize('changes', [{'llm_provider': 'claude'}, {'llm_provider': 'openai', 'openai_api_key': ' '}])
+def test_startup_rejects_invalid_llm_settings(monkeypatch, changes):
+    monkeypatch.setattr(gateway, 'CONFIG', replace(gateway.CONFIG, **changes))
+    with pytest.raises(ValueError):
+        with TestClient(gateway.app):
+            pass
