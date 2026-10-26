@@ -40,9 +40,8 @@ The text conversational core is ready for development use. The voice pipeline is
 - [x] NixOS service module and daily transcript backups
 - [x] Native macOS app shell and tool sidebar (`apple/`)
 - [ ] Native chat, productivity tools and voice
+- [ ] Native iOS app with equal capabilities to macOS client.
 - [ ] External integrations
-
-OpenAI routing is covered by mocked tests only. It has not been checked end to end against the live API.
 
 ## Requirements
 
