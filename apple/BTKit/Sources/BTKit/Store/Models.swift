@@ -283,15 +283,15 @@ public struct Message: Identifiable, Equatable, Sendable {
     public var insight: Insight?
     public var resultCards: [ResultCard]
     public var time: Date
-    /// The server answered with the cloud model.
-    public var isCloud: Bool
+    /// Display name of the provider that answered ("OpenAI", "Ollama"), if the server said.
+    public var provider: String?
 
     public init(
         id: String = UUID().uuidString, role: MessageRole, text: String? = nil, insight: Insight? = nil,
-        resultCards: [ResultCard] = [], time: Date = .now, isCloud: Bool = false
+        resultCards: [ResultCard] = [], time: Date = .now, provider: String? = nil
     ) {
         self.id = id
-        self.isCloud = isCloud
+        self.provider = provider
         self.role = role
         self.text = text
         self.insight = insight

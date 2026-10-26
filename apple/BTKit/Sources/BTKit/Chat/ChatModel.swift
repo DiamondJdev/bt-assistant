@@ -284,7 +284,7 @@ public final class ChatModel {
             #if BT_DIAGNOSTICS
             if let diagnosticTurnID {
                 if let metrics, turnID == diagnosticTurnID { DiagnosticsRecorder.shared.update(turnID: diagnosticTurnID, metrics: metrics) }
-                // A reply that arrives whole (cloud fallback) shows its first text here.
+                // A reply that arrives whole (no streamed deltas) shows its first text here.
                 if streamingText?.isEmpty ?? true, !text.isEmpty {
                     DiagnosticsRecorder.shared.event(.firstText, turnID: diagnosticTurnID)
                 }

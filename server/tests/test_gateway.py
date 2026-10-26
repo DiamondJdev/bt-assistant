@@ -86,8 +86,28 @@ def test_readiness_checks_model_and_reports_dependency_failure(client, monkeypat
     assert client.get('/ready').json()['reason'] == 'Ollama is not reachable'
 
 
-def test_config_reports_model_for_status_display(client):
+def test_openai_readiness_does_not_contact_ollama(client, monkeypatch):
+    def no_http(**kw):
+        raise AssertionError('readiness must not contact Ollama in openai mode')
+    monkeypatch.setattr(gateway.httpx, 'AsyncClient', no_http)
+    monkeypatch.setattr(gateway, 'CONFIG', replace(gateway.CONFIG, llm_provider='openai', openai_api_key='sk-secret'))
+    assert client.get('/ready').status_code == 200
+
+
+def test_config_reports_selected_provider_and_model_without_credentials(client, monkeypatch):
+    from bt.devui import routes
     assert client.get('/config').json()['model'] == gateway.CONFIG.ollama_model
+    assert client.get('/config').json()['provider'] == 'ollama'
+    cfg = replace(gateway.CONFIG, llm_provider='openai', openai_api_key='sk-secret')
+    monkeypatch.setattr(gateway, 'CONFIG', cfg)
+    monkeypatch.setattr(routes, 'CONFIG', cfg)
+    body = client.get('/config')
+    assert body.json() == {'voice_enabled': cfg.voice_enabled, 'provider': 'openai', 'model': cfg.openai_model}
+    dev = routes.config()
+    data = __import__('json').loads(dev.body)
+    assert data['provider'] == 'openai' and data['model'] == cfg.openai_model
+    assert 'ollama_model' not in data and data['cloud_enabled'] is True
+    assert 'sk-secret' not in body.text and b'sk-secret' not in dev.body
 
 
 def test_memories_lists_the_index_without_bodies(client, monkeypatch, tmp_path):
@@ -103,3 +123,11 @@ def test_memories_lists_the_index_without_bodies(client, monkeypatch, tmp_path):
     assert entry['type'] == 'user'
     assert entry['updated']
     assert 'body' not in entry
+
+
+@pytest.mark.parametrize('changes', [{'llm_provider': 'claude'}, {'llm_provider': 'openai', 'openai_api_key': ' '}])
+def test_startup_rejects_invalid_llm_settings(monkeypatch, changes):
+    monkeypatch.setattr(gateway, 'CONFIG', replace(gateway.CONFIG, **changes))
+    with pytest.raises(ValueError):
+        with TestClient(gateway.app):
+            pass

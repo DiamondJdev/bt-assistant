@@ -73,7 +73,7 @@ def _provider(key: str) -> Provider:
 			_PROVIDERS[key] = Provider(key, CONFIG.ollama_model, client)
 		else:
 			if not CONFIG.openai_api_key:
-				raise RuntimeError("Escalation requested but OPENAI_API_KEY is not set")
+				raise RuntimeError("OPENAI_API_KEY is not set")
 			client = AsyncOpenAI(api_key=CONFIG.openai_api_key, timeout=LLM_TIMEOUT_SECS, max_retries=1)
 			_PROVIDERS[key] = Provider(key, CONFIG.openai_model, client)
 	return _PROVIDERS[key]
@@ -139,8 +139,10 @@ async def respond(
 ) -> LLMResponse | None:
 	if provider not in {None, "local", "cloud"}:
 		raise ValueError("Unknown provider")
-	escalated = provider == "cloud" or wants_escalation(user_text)
-	if escalated:
+	# On the cloud there are no local heuristics or fallback; only an Ollama-mode escalation is logged.
+	primary_cloud = provider != "local" and CONFIG.llm_provider == "openai"
+	escalated = primary_cloud or provider == "cloud" or wants_escalation(user_text)
+	if escalated and not primary_cloud:
 		log.info("starting on the cloud model")
 
 	current = _provider("openai" if escalated else "ollama")

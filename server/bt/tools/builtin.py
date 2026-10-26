@@ -30,7 +30,7 @@ VOICE_SKILL_CHARS = 2000
 	name="environment_report",
 	description=(
 		"Report the live state of the machine BT runs on: uptime, free memory, "
-		"free disk, and whether the local model is reachable."
+		"free disk, and the model BT runs on."
 	),
 	manifest="You can report the live state of the machine with environment_report.",
 	timeout_secs=5.0,
@@ -51,6 +51,9 @@ async def environment_report(ctx: ToolContext) -> str:
 	except OSError:
 		log.warning("could not read disk usage")
 
+	if CONFIG.llm_provider == "openai":
+		parts.append(f"The primary model is {CONFIG.openai_model} via OpenAI.")
+		return " ".join(parts)
 	reachable = await _ollama_reachable()
 	parts.append(
 		f"The local model {CONFIG.ollama_model} is reachable."

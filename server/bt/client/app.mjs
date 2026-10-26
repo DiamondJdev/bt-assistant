@@ -39,7 +39,7 @@ function metaText({ ts, compute, input_mode: mode } = {}) {
   const parts = [];
   if (ts) parts.push(new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
   if (mode === 'voice') parts.push('voice');
-  if (compute) parts.push(compute === 'openai' ? 'cloud' : 'local');
+  if (compute) parts.push(compute === 'openai' ? 'OpenAI' : 'Ollama');
   return parts.join(' · ');
 }
 
@@ -184,7 +184,7 @@ $('chat').onsubmit = async event => {
     saveSession(response.session_id);
     await restoreHistory();
     await refreshSessions();
-    status(response.compute === 'openai' ? 'Answered using cloud fallback.' : '');
+    status(response.compute === 'openai' ? 'Answered by OpenAI.' : '');
   } catch (error) {
     status(error.message);
     $('message').value ||= text;

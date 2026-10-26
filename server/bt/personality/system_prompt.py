@@ -62,7 +62,8 @@ def _tool_lines(surface: str) -> list[str]:
 def situation(surface: str) -> list[str]:
 	lines = [
 		f"You are running on {platform.node()}, a {platform.system()} host.",
-		f"Your local model is {CONFIG.ollama_model}.",
+		f"Your primary model is {CONFIG.primary_model} via {'OpenAI' if CONFIG.llm_provider == 'openai' else 'Ollama'};"
+		" some turns may use another model.",
 		"This turn is spoken aloud."
 		if surface == "voice"
 		else "This turn is delivered as text, not spoken.",

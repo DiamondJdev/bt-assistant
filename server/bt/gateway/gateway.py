@@ -32,6 +32,7 @@ STATIC = Path(__file__).parents[1] / "client"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 	CONFIG.validate_access()
+	CONFIG.validate_llm()
 	app.state.voice_busy = False
 	app.state.voice_services = None
 	if CONFIG.voice_enabled:
@@ -89,6 +90,9 @@ def health() -> dict[str, str]:
 async def ready() -> dict | JSONResponse:
 	try:
 		await asyncio.to_thread(store.list_sessions)
+		# Startup validated the OpenAI settings; remote auth is not checked here.
+		if CONFIG.llm_provider == "openai":
+			return {"status": "ready", "voice_enabled": CONFIG.voice_enabled}
 		async with httpx.AsyncClient(timeout=5) as client:
 			response = await client.get(CONFIG.ollama_url("/api/tags"))
 			response.raise_for_status()
@@ -109,7 +113,7 @@ def _unavailable(reason: str) -> JSONResponse:
 
 @app.get("/config")
 def config() -> dict[str, bool | str]:
-	return {"voice_enabled": CONFIG.voice_enabled, "model": CONFIG.ollama_model}
+	return {"voice_enabled": CONFIG.voice_enabled, "provider": CONFIG.llm_provider, "model": CONFIG.primary_model}
 
 
 @app.get("/sessions")

@@ -1,6 +1,6 @@
 # BT agent guide
 
-BT is a local-first personal assistant. The Python/FastAPI hub handles Ollama chat, optional OpenAI escalation, SQLite transcripts, and streaming voice.
+BT is a local-first personal assistant. The Python/FastAPI hub handles chat through OpenAI by default (or Ollama with `BT_LLM_PROVIDER=ollama`, which keeps OpenAI escalation), SQLite transcripts, and streaming voice.
 
 See `README.md` for setup and `docs/DESIGN.md` for design context.
 

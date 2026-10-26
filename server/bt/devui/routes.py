@@ -26,7 +26,8 @@ def index() -> HTMLResponse:
 def config() -> JSONResponse:
 	return JSONResponse({
 		"dev_mode_enabled": CONFIG.developer_mode,
-		"ollama_model": CONFIG.ollama_model,
+		"provider": CONFIG.llm_provider,
+		"model": CONFIG.primary_model,
 		"cloud_enabled": bool(CONFIG.openai_api_key),
 		"piper_voice": CONFIG.piper_voice,
 		"whisper_model": CONFIG.whisper_model,
