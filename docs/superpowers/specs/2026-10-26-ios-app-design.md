@@ -1,10 +1,10 @@
 # BT for iPhone: design
 
-Date: 2026-10-26. Status: draft for owner review.
+Date: 2026-10-26. Status: approved
 
 ## Why
 
-The owner wants to talk to BT the way they talk to Siri: phone locked in a pocket, AirPods in, say a phrase, give a command like "I have a chemistry assignment due later today, add it to my to-do list and remind me tonight", and have BT do it. Reminders and the to-do list are the main reasons the app exists. The text model is moving to a stronger OpenAI model, so tools no longer need to be simplified for a small local model.
+The owner wants to talk to BT the way they talk to Siri: phone locked in a pocket, AirPods in, say a phrase, give a command like "I have a chemistry assignment due later today, add it to my to-do list and remind me tonight", and have BT do it. Reminders and the to-do list are the main reasons the app exists. This plan is staged after the agent pipeline hardening and the new escalation rules, so we can assume OpenAI models will be used
 
 ## Success for version 1
 
@@ -209,7 +209,6 @@ Before building the app, a throwaway app signed with the free Apple ID checks th
 3. AlarmKit is available to a personal team and an alarm fires from a locked phone.
 4. SpeechAnalyzer recognizes speech through AirPods with acceptable delay.
 5. A round trip to the server over Tailscale on cellular, from a locked phone.
-6. Notifications and alarms scheduled before the 7-day signing expiry still fire after it. This check takes a week of waiting.
 
 If any of 1 to 3 fail with a free account, stop and revisit the trigger or alarm design with the owner.
 
