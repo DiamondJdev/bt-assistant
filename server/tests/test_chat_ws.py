@@ -55,7 +55,7 @@ def test_opt_in_diagnostics_correlate_done_and_live_metrics(client, monkeypatch)
     _install(monkeypatch, fake)
     with client.websocket_connect('/chat/ws') as ws:
         ws.receive_json()
-        ws.send_json({'type': 'message', 'text': 'Hi', 'diagnostics': True, 'turn_id': turn_id})
+        ws.send_json({'type': 'message', 'text': 'Hi', 'diagnostics': True, 'turn_id': turn_id.upper()})
         live = ws.receive_json()
         assert live['type'] == 'metrics'
         done = ws.receive_json()
@@ -284,11 +284,47 @@ def test_unanswered_client_tool_times_out(client, monkeypatch):
     with client.websocket_connect('/chat/ws') as ws:
         _start(ws)
         assert ws.receive_json()['type'] == 'tool_call'
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
         done = ws.receive_json()
+        ws.send_json({'type': 'tool_approval', 'id': 'c1'})
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
         ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'too late'})
         ws.send_json({'type': 'message', 'text': 'still there?'})
         assert ws.receive_json()['type'] == 'tool_call'
     assert done['text'] == 'The app did not answer calendar_list_events in time.'
+
+
+def test_live_client_tool_approval_is_acknowledged(client, monkeypatch):
+    _tool_turn(monkeypatch)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        assert ws.receive_json()['type'] == 'tool_call'
+        ws.send_json({'type': 'tool_approval', 'id': 'other'})
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'other'}
+        ws.send_json({'type': 'tool_approval', 'id': 'c1'})
+        assert ws.receive_json() == {'type': 'tool_approved', 'id': 'c1'}
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Approved'})
+        assert ws.receive_json()['text'] == 'Approved'
+
+
+def test_late_approval_is_rejected_while_followup_is_streaming(client, monkeypatch):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_TIMEOUT_SECS', 0.05)
+    resume = threading.Event()
+    async def fake(messages, text, **kw):
+        content = await kw['call_client']('c1', 'calendar_list_events', '{}')
+        await kw['on_delta']('Continuing after timeout')
+        await asyncio.to_thread(resume.wait, 2)
+        return LLMResponse(content, 'ollama')
+    _install(monkeypatch, fake)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        assert ws.receive_json()['type'] == 'tool_call'
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
+        assert ws.receive_json()['type'] == 'delta'
+        ws.send_json({'type': 'tool_approval', 'id': 'c1'})
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
+        resume.set()
+        assert ws.receive_json()['type'] == 'done'
 
 
 def test_unknown_tool_result_is_ignored(client, monkeypatch):

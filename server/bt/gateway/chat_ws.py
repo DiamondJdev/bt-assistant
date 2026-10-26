@@ -73,7 +73,12 @@ class ToolResult(BaseModel):
 	content: str = ""
 
 
-Frame = TypeAdapter(Annotated[Hello | Message | ToolResult, Field(discriminator="type")])
+class ToolApproval(BaseModel):
+	type: Literal["tool_approval"]
+	id: str
+
+
+Frame = TypeAdapter(Annotated[Hello | Message | ToolResult | ToolApproval, Field(discriminator="type")])
 
 
 def _frame_error(exc: ValidationError) -> str:
@@ -136,6 +141,12 @@ class _Connection:
 				await self.error("Wait for the current reply.")
 				return
 			self.turn = asyncio.create_task(self.run_turn(frame))
+		elif isinstance(frame, ToolApproval):
+			waiter = self.pending.get(frame.id)
+			await self.ws.send_json({
+				"type": "tool_approved" if waiter is not None and not waiter.done() else "tool_cancelled",
+				"id": frame.id,
+			})
 		else:
 			# Results for unknown or expired calls are dropped.
 			waiter = self.pending.get(frame.id)
@@ -249,6 +260,7 @@ class _Connection:
 			result = await asyncio.wait_for(waiter, CLIENT_TOOL_TIMEOUT_SECS)
 		except TimeoutError:
 			log.warning("client tool %s timed out", name)
+			await self.ws.send_json({"type": "tool_cancelled", "id": call_id})
 			return f"The app did not answer {name} in time."
 		finally:
 			self.pending.pop(call_id, None)

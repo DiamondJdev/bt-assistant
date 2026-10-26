@@ -188,14 +188,14 @@ class Developer:
     def test(self, suite, test_filter):
         if suite not in {"swift", "server", "all"}:
             raise DevError(f"Unknown SUITE={suite!r}; use swift, server, or all.")
+        selected = False
         if suite in {"swift", "all"}:
             self.mac_tools("swift")
             command = ["swift", "test", "--package-path", str(self.root / "apple/BTKit"), "--scratch-path", str(self.cache / "swift")]
             if test_filter:
                 command += ["--filter", test_filter]
             output = self.run(command)
-            if test_filter and not any(int(count) > 0 for count in re.findall(r"(?:Executed |Test run with )(\d+) tests?", output)):
-                raise DevError(f"Swift FILTER={test_filter!r} selected zero tests (or the runner reported no count).")
+            selected |= any(int(count) > 0 for count in re.findall(r"(?:Executed |Test run with )(\d+) tests?", output))
         if suite in {"server", "all"}:
             command = self.server_command()
             self.require("node")
@@ -203,11 +203,18 @@ class Developer:
             python_tests = command + ["python", "-m", "pytest", "-q"]
             if test_filter:
                 python_tests += ["-k", test_filter]
-            self.run(python_tests, cwd=self.root / "server")
-            self.node_tests(self.node_files("server/tests", self.root / "server"), self.root / "server", test_filter)
+            try:
+                self.run(python_tests, cwd=self.root / "server")
+                selected = True
+            except DevError as error:
+                if not test_filter or error.code != 5:
+                    raise
+            selected |= self.node_tests(self.node_files("server/tests", self.root / "server"), self.root / "server", test_filter)
         if suite == "all":
             # Pass files, not the folder: Node would load extension.js, which needs VS Code.
-            self.node_tests(self.node_files("editors/vscode", self.root), self.root, test_filter)
+            selected |= self.node_tests(self.node_files("editors/vscode", self.root), self.root, test_filter)
+        if test_filter and not selected:
+            raise DevError(f"FILTER={test_filter!r} selected zero tests across SUITE={suite} (or the runners reported no count).")
 
     def node_files(self, folder, cwd):
         files = sorted(str(path.relative_to(cwd)) for path in (self.root / folder).glob("*.test.mjs"))
@@ -220,8 +227,9 @@ class Developer:
         if test_filter:
             command += ["--test-name-pattern", test_filter]
         output = self.run(command + paths, cwd=cwd)
-        if test_filter and not any(int(count) > 0 for count in re.findall(r"^# (?:pass|fail) (\d+)\s*$", output, re.MULTILINE)):
-            raise DevError(f"Node FILTER={test_filter!r} selected zero tests (or the runner reported no count).")
+        passed = sum(int(count) for count in re.findall(r"^# pass (\d+)\s*$", output, re.MULTILINE))
+        empty_files = len(re.findall(r"^1\.\.0\s*$", output, re.MULTILINE))
+        return not test_filter or passed > empty_files
 
     def logs(self, category):
         self.mac_tools("log")

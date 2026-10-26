@@ -144,12 +144,12 @@ class DeveloperCommandsTests(unittest.TestCase):
         self.install_fixture()
         def fail_pytest(command, **kwargs):
             if "pytest" in command:
-                raise dev.DevError("No tests collected", 5)
+                raise dev.DevError("Tests failed", 1)
             return self.fake_run(command, **kwargs)
         with patch.object(self.wrapper, "require"), patch.object(self.wrapper, "run", side_effect=fail_pytest):
             with self.assertRaises(dev.DevError) as error:
                 self.wrapper.test("server", "missing")
-        self.assertEqual(error.exception.code, 5)
+        self.assertEqual(error.exception.code, 1)
         self.assertFalse(any(command[0] == "node" for command, _ in self.commands))
 
     def test_missing_tool_is_an_actionable_error(self):
@@ -181,11 +181,72 @@ class DeveloperCommandsTests(unittest.TestCase):
         self.assertTrue(any(command[-1] == "editors/vscode/heartbeat.test.mjs" for command in commands))
         self.assertEqual(next(kwargs["cwd"] for command, kwargs in self.commands if "pytest" in command), self.root / "server")
 
-    def test_node_filter_with_only_skips_fails(self):
+    def test_filtered_suites_require_a_collective_match(self):
         self.install_fixture()
-        with patch.object(self.wrapper, "require"), patch.object(self.wrapper, "run", return_value="# tests 8\n# pass 0\n# fail 0\n# skipped 8\n"):
-            with self.assertRaisesRegex(dev.DevError, "zero tests"):
-                self.wrapper.test("server", "missing")
+        for suite, selected in (("server", "python"), ("server", "server-node"), ("all", "python"), ("all", "server-node"), ("all", "editor-node"), ("all", "swift"), ("server", None), ("all", None)):
+            with self.subTest(suite=suite, selected=selected):
+                self.commands.clear()
+                def filtered_run(command, **kwargs):
+                    self.commands.append((command, kwargs))
+                    if "pytest" in command:
+                        if selected != "python":
+                            raise dev.DevError("No tests collected", 5)
+                        return "1 passed\n"
+                    if command[0] == "swift":
+                        return f"Executed {int(selected == 'swift')} tests, with 0 failures\n"
+                    if command[0] == "node":
+                        runner = "editor-node" if command[-1].startswith("editors/") else "server-node"
+                        if selected == runner:
+                            return "# tests 1\n# pass 1\n# fail 0\n"
+                        return "1..0\n# Subtest: empty.test.mjs\nok 1 - empty.test.mjs\n1..1\n# tests 1\n# pass 1\n# fail 0\n"
+                    return ""
+                with patch.object(self.wrapper, "mac_tools"), patch.object(self.wrapper, "require"), patch.object(self.wrapper, "run", side_effect=filtered_run):
+                    if selected:
+                        self.wrapper.test(suite, "example")
+                    else:
+                        with self.assertRaisesRegex(dev.DevError, "zero tests"):
+                            self.wrapper.test(suite, "example")
+                self.assertEqual(sum(command[0] == "node" for command, _ in self.commands), 2 if suite == "all" else 1)
+
+    def test_node_empty_filter_output_is_not_a_match(self):
+        for output in (
+            "# tests 8\n# pass 0\n# fail 0\n# skipped 8\n",
+            "1..0\n1..0\n1..2\n# tests 2\n# pass 2\n# fail 0\n",
+            "no test counts\n",
+        ):
+            with self.subTest(output=output), patch.object(self.wrapper, "run", return_value=output):
+                self.assertFalse(self.wrapper.node_tests(["example.test.mjs"], self.root, "missing"))
+
+    def test_node_match_with_an_empty_file_is_accepted(self):
+        with patch.object(self.wrapper, "run", return_value="1..0\n# tests 2\n# pass 2\n# fail 0\n"):
+            self.assertTrue(self.wrapper.node_tests(["example.test.mjs"], self.root, "example"))
+
+    def test_later_runner_failures_override_earlier_matches(self):
+        self.install_fixture()
+        for failing in ("swift", "server-node", "editor-node"):
+            with self.subTest(failing=failing):
+                def fail_runner(command, **kwargs):
+                    runner = command[0]
+                    if runner == "node":
+                        runner = "editor-node" if command[-1].startswith("editors/") else "server-node"
+                    if runner == failing:
+                        raise dev.DevError("Tests failed", 2)
+                    return self.fake_run(command, **kwargs)
+                with patch.object(self.wrapper, "mac_tools"), patch.object(self.wrapper, "require"), patch.object(self.wrapper, "run", side_effect=fail_runner):
+                    with self.assertRaises(dev.DevError) as error:
+                        self.wrapper.test("all", "example")
+                self.assertEqual(error.exception.code, 2)
+
+    def test_unfiltered_pytest_empty_selection_keeps_exit_code(self):
+        self.install_fixture()
+        def empty_pytest(command, **kwargs):
+            if "pytest" in command:
+                raise dev.DevError("No tests collected", 5)
+            return self.fake_run(command, **kwargs)
+        with patch.object(self.wrapper, "require"), patch.object(self.wrapper, "run", side_effect=empty_pytest):
+            with self.assertRaises(dev.DevError) as error:
+                self.wrapper.test("server", "")
+        self.assertEqual(error.exception.code, 5)
 
     def test_missing_server_environment_has_explicit_setup_guidance(self):
         with patch.object(self.wrapper, "require"):

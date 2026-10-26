@@ -67,7 +67,7 @@ public final class AppStore {
     private let clock: () -> Date
     private var loadedWindow: DateInterval?
     private var loadedTokens: [Int]?
-    var loadedCode: (token: Int, day: Date)?
+    var loadedCode: (token: Int, day: Date, focusBlocks: [CalendarEvent])?
     /// Where `SavedPlans` live. Nil in tests and previews, which keep everything in memory.
     private let savedPlans: UserDefaults?
     private var lastSavedPlans: SavedPlans?
@@ -213,8 +213,7 @@ public final class AppStore {
             plannedSeconds: minutes * 60, startedAt: now
         )
         if let pomodoro {
-            pomodoro.label = event.title
-            pomodoro.startWork(length: Double(minutes * 60))
+            pomodoro.startWork(length: Double(minutes * 60), label: event.title)
             syncFocus()
         }
         route = .focus
@@ -409,10 +408,11 @@ public final class AppStore {
     func reloadProjectsIfNeeded() {
         guard let codeSource else { return }
         let day = calendar.startOfDay(for: now)
-        if let loadedCode, loadedCode.token == codeSource.changeToken, loadedCode.day == day { return }
+        let focusBlocks = events.filter { $0.kind == .focusLogged }
+        if let loadedCode, loadedCode.token == codeSource.changeToken, loadedCode.day == day,
+           loadedCode.focusBlocks == focusBlocks { return }
         // Five weeks covers this week plus the three-week average.
         let since = calendar.date(byAdding: .day, value: -35, to: day) ?? day
-        let focusBlocks = events.filter { $0.kind == .focusLogged }
         let fresh = codeSource.projects(since: since).filter { !hiddenProjectIDs.contains($0.id) }.map { p in
             var p = p
             if let old = project(p.id) {
@@ -432,7 +432,7 @@ public final class AppStore {
         }
         let ids = Set(fresh.map(\.id))
         projects = fresh + projects.filter { !ids.contains($0.id) }
-        loadedCode = (codeSource.changeToken, day)
+        loadedCode = (codeSource.changeToken, day, focusBlocks)
     }
 
     // MARK: BT
@@ -482,13 +482,16 @@ public final class AppStore {
     }
 
     /// Reverses a BT write in its module and marks the thread card undone.
-    public func undo(_ entryID: String) {
-        guard let i = ledger.firstIndex(where: { $0.id == entryID }), !ledger[i].isUndone else { return }
+    @discardableResult
+    public func undo(_ entryID: String) -> Bool {
+        guard let i = ledger.firstIndex(where: { $0.id == entryID }) else { return false }
+        if ledger[i].isUndone { return true }
         switch ledger[i].undo {
         case .removeEvent(let id):
-            deleteEvent(id)
+            guard deleteEvent(id) != nil else { return false }
         case .restoreEvent(let event):
-            if self.event(event.id) != nil { updateEvent(event) } else { addEvent(event) }
+            let restored = self.event(event.id) != nil ? updateEvent(event) : addEvent(event)
+            guard restored != nil else { return false }
         case .removeMemory(let id):
             memories.removeAll { $0.id == id }
         case .removeTodo(let id):
@@ -501,6 +504,7 @@ public final class AppStore {
         }
         ledger[i].isUndone = true
         if let cardID = ledger[i].resultCardID { markCardUndone(cardID) }
+        return true
     }
 
     private func markCardUndone(_ cardID: String) {

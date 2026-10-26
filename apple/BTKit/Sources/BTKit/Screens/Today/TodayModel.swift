@@ -182,21 +182,21 @@ extension AppStore {
             title: "Focus — session \(focus.number + 1)", start: slot.start, end: slot.end,
             kind: .studyPlanned, source: .bt, runAsFocus: true, focusPlan: "50/10", linkedProjectID: focus.projectID
         )
-        addEvent(event)
+        guard let saved = addEvent(event) else { return }
         let entry = LedgerEntry(
             time: now, kind: .calendar,
-            summary: "Booked \(event.title) · \(TodayFormat.clock(slot.start, calendar))", undo: .removeEvent(id: event.id)
+            summary: "Booked \(saved.title) · \(TodayFormat.clock(slot.start, calendar))", undo: .removeEvent(id: saved.id)
         )
         record(entry)
-        today.bookedEventID = event.id
+        today.bookedEventID = saved.id
         today.bookedLedgerID = entry.id
     }
 
     func undoTodayBooking() {
         if let ledgerID = today.bookedLedgerID {
-            undo(ledgerID)
+            guard undo(ledgerID) else { return }
         } else if let id = today.bookedEventID {
-            deleteEvent(id)
+            guard deleteEvent(id) != nil else { return }
         }
         today.bookedEventID = nil
         today.bookedLedgerID = nil

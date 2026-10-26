@@ -64,6 +64,7 @@ public final class ChatModel {
     #endif
     /// What each pending approval needs to run once the owner answers.
     private var waitingCalls: [String: WaitingCall] = [:]
+    private var approvingCalls: [String: WaitingCall] = [:]
 
     public init(
         makeAPI: @escaping (ChatEndpoints) -> any ChatAPI = URLSessionChatAPI.init,
@@ -130,7 +131,7 @@ public final class ChatModel {
             var message = ClientFrame.message(text: text, context: context)
             #if BT_DIAGNOSTICS
             if diagnosticsRequested, DiagnosticsRecorder.shared.enabled {
-                let turnID = UUID().uuidString
+                let turnID = UUID().uuidString.lowercased()
                 diagnosticTurnID = turnID
                 DiagnosticsRecorder.shared.begin(
                     turnID: turnID, contextChars: context?.unicodeScalars.count ?? 0,
@@ -165,10 +166,11 @@ public final class ChatModel {
         return socket
     }
 
-    /// Runs a waiting call and sends its result. Does nothing once the card is gone.
+    /// Requests server confirmation before running an approved call.
     public func approve(_ id: String) async {
         guard let call = takeWaitingCall(id) else { return }
-        await run(call.module, call.name, call.args, id: id, socket: call.socket)
+        approvingCalls[id] = call
+        await reply(.toolApproval(id: id), on: call.socket)
     }
 
     /// Tells the server the owner declined a waiting call. Does nothing once the card is gone.
@@ -244,6 +246,7 @@ public final class ChatModel {
         #endif
         pendingApprovals = []
         waitingCalls = [:]
+        approvingCalls = [:]
     }
 
     private func receiveLoop(_ socket: any ChatSocket) async {
@@ -296,8 +299,11 @@ public final class ChatModel {
             // The server stopped waiting; a late answer would go nowhere.
             clearApprovals()
             await loadSessions()
-        case .error(let message):
+        case .error(let message, let turnID, let metrics):
             #if BT_DIAGNOSTICS
+            if let diagnosticTurnID, turnID == diagnosticTurnID, let metrics {
+                DiagnosticsRecorder.shared.update(turnID: diagnosticTurnID, metrics: metrics)
+            }
             finishDiagnosticTurn(.failed)
             #endif
             errorMessage = message
@@ -311,6 +317,13 @@ public final class ChatModel {
             }
         case .toolCall(let id, let name, let args):
             await handleToolCall(id: id, name: name, args: args, from: socket)
+        case .toolApproved(let id):
+            if let call = approvingCalls.removeValue(forKey: id) {
+                await run(call.module, call.name, call.args, id: id, socket: call.socket)
+            }
+        case .toolCancelled(let id):
+            _ = takeWaitingCall(id)
+            approvingCalls.removeValue(forKey: id)
         case .unknown:
             break
         case .metrics(let turnID, let metrics):

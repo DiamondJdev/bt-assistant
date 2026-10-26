@@ -192,6 +192,7 @@ final class FakeCalendarSource: CalendarSource {
     var changeToken = 0
     var hasAccess = true
     var failSaves = false
+    var failDeletes = false
     var renameOnSave: String?
 
     init(_ events: [CalendarEvent]) { self.events = events }
@@ -210,6 +211,7 @@ final class FakeCalendarSource: CalendarSource {
     }
 
     func delete(_ event: CalendarEvent) throws {
+        if failDeletes { throw ToolError.failed("read-only") }
         events.removeAll { $0.id == event.id }
     }
 }

@@ -25,6 +25,9 @@ struct ChatWireTests {
     }
 
     @Test func encodesClientFramesInTheServerShape() throws {
+        #expect(try object(.toolApproval(id: "c1")) == ["type": "tool_approval", "id": "c1"] as NSDictionary)
+        #expect(try frame(#"{"type":"tool_approved","id":"c1"}"#) == .toolApproved(id: "c1"))
+        #expect(try frame(#"{"type":"tool_cancelled","id":"c1"}"#) == .toolCancelled(id: "c1"))
         #expect(try object(.message(text: "Hi", context: nil)) == ["type": "message", "text": "Hi"] as NSDictionary)
         #expect(try object(.message(text: "Hi", context: "Pomodoro idle"))
             == ["type": "message", "text": "Hi", "context": "Pomodoro idle"] as NSDictionary)

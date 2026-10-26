@@ -93,13 +93,14 @@ public final class PomodoroModule: ToolModule {
     }
 
     /// Starts a work phase of `length`, ending any other active or waiting phase first.
-    public func startWork(length: TimeInterval) {
+    public func startWork(length: TimeInterval, label: String? = nil) {
         if state.phase != .work || state.isRunning || state.isPaused {
             finish(state.switched(to: .work, at: now()))
             enqueue { await $0.cancelAll() }
         }
         var custom = durations
         custom.work = length
+        if let label { self.label = label }
         state = state.started(at: now(), durations: custom)
         scheduleNotification()
     }

@@ -16,8 +16,7 @@ function activate(context) {
 			const project = folder.name;
 			const language = document.languageId;
 			const now = Date.now();
-			// Saves always send, but still update the throttle's last beat.
-			if (!shouldSend(project, language, now) && !force) return;
+			if (!shouldSend(project, language, now, force)) return;
 			const file = inboxFile(os.homedir(), new Date(now));
 			fs.mkdirSync(path.dirname(file), { recursive: true });
 			fs.appendFileSync(file, heartbeatLine({ ts: now / 1000, project, language }));

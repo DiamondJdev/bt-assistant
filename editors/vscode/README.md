@@ -27,5 +27,5 @@ It never records file paths, file names or file contents. Files outside a worksp
 ## Test
 
 ```sh
-node --test editors/vscode
+node --test editors/vscode/*.test.mjs
 ```

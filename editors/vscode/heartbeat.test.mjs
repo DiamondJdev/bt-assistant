@@ -32,6 +32,15 @@ test("throttle allows the same pair after a minute", () => {
 	assert.equal(shouldSend("bt", "swift", 61_000), false);
 });
 
+test("forced saves restart the throttle interval", () => {
+	const shouldSend = createThrottle();
+	assert.equal(shouldSend("bt", "swift", 0), true);
+	assert.equal(shouldSend("bt", "swift", 50_000, true), true);
+	assert.equal(shouldSend("bt", "swift", 60_000), false);
+	assert.equal(shouldSend("bt", "swift", 109_999), false);
+	assert.equal(shouldSend("bt", "swift", 110_000), true);
+});
+
 test("inbox file uses the local date", () => {
 	const date = new Date(2026, 0, 5, 23, 30);
 	assert.equal(inboxFile("/Users/me", date), "/Users/me/.bt/inbox/vscode-2026-01-05.jsonl");

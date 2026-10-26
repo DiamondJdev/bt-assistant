@@ -107,10 +107,10 @@ extension AppStore {
         switch suggestion.action {
         case let .book(start, end, title):
             let hours = Int(end.timeIntervalSince(start) / 3600)
-            addEvent(CalendarEvent(
+            guard addEvent(CalendarEvent(
                 title: title, start: start, end: end, kind: .studyPlanned, source: .bt,
                 runAsFocus: true, focusPlan: "\(max(1, hours) * 2)×25", linkedProjectID: projectID
-            ))
+            )) != nil else { return }
         case .focusGoal(let title):
             focus.goals.append(SessionGoal(title: title))
         case .weeklyGoal(let hours):

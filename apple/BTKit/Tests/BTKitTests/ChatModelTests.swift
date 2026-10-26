@@ -83,10 +83,13 @@ struct ChatModelTests {
             Issue.record("Expected a diagnostic message, got \(String(describing: socket.sent.last))")
             return
         }
+        #expect(turnID == turnID.lowercased())
+        socket.push(.metrics(turnID: turnID.lowercased(), metrics: ServerMetrics(durationMs: 21)))
+        try await waitUntil { DiagnosticsRecorder.shared.snapshot().turns.first { $0.id == turnID }?.server?.durationMs == 21 }
         socket.push(.metrics(turnID: "someone-else", metrics: ServerMetrics(durationMs: 1)))
         socket.push(.delta("Hel"))
         socket.push(.delta("lo"))
-        socket.push(.done(text: "Hello", compute: "ollama", toolsUsed: [], turnID: turnID, metrics: ServerMetrics(durationMs: 42)))
+        socket.push(.done(text: "Hello", compute: "ollama", toolsUsed: [], turnID: turnID.lowercased(), metrics: ServerMetrics(durationMs: 42)))
         try await waitUntil { model.streamingText == nil }
 
         let turn = try #require(DiagnosticsRecorder.shared.snapshot().turns.first { $0.id == turnID })
@@ -94,6 +97,26 @@ struct ChatModelTests {
         #expect(turn.chunks == 2)
         #expect(turn.firstTextMs != nil)
         #expect(turn.server?.durationMs == 42)
+    }
+
+    @Test(arguments: [true, false])
+    func failedDiagnosticTurnRetainsOnlyMatchingServerMetrics(matches: Bool) async throws {
+        let model = makeModel()
+        model.enableDiagnostics()
+        let socket = await sendHi(model)
+        guard case .message(_, _, let turnID?, true) = socket.sent.last else {
+            Issue.record("Expected diagnostic turn")
+            return
+        }
+        let serverTurnID = matches ? turnID : "another-turn"
+        let json = """
+        {"type":"error","message":"Response failed.","turn_id":"\(serverTurnID)","metrics":{"duration_ms":73}}
+        """
+        socket.push(try ChatJSON.decoder.decode(ServerFrame.self, from: Data(json.utf8)))
+        try await waitUntil { !model.isSending }
+        let turn = try #require(DiagnosticsRecorder.shared.snapshot().turns.first { $0.id == turnID })
+        #expect(turn.status == .failed)
+        #expect(turn.server?.durationMs == (matches ? 73 : nil))
     }
     #endif
 
@@ -115,7 +138,8 @@ struct ChatModelTests {
 
     @Test func approvalCallWaitsThenApproveReplies() async throws {
         let model = makeModel()
-        model.modules = [FakeToolModule()]
+        let module = FakeToolModule()
+        model.modules = [module]
         let socket = await sendHi(model)
         socket.push(.toolCall(id: "c1", name: "fake_write", args: ["title": "Lab", "n": 2]))
         try await waitUntil { !model.pendingApprovals.isEmpty }
@@ -126,7 +150,36 @@ struct ChatModelTests {
 
         await model.approve("c1")
         #expect(model.pendingApprovals.isEmpty)
+        #expect(module.calls.isEmpty)
+        #expect(socket.sent.last == .toolApproval(id: "c1"))
+        let acknowledgement = try ChatJSON.decoder.decode(ServerFrame.self, from: Data(#"{"type":"tool_approved","id":"c1"}"#.utf8))
+        socket.push(acknowledgement)
+        try await waitUntil { socket.sent.count == 4 }
         #expect(socket.sent.last == .toolResult(id: "c1", ok: true, content: "wrote"))
+        socket.push(acknowledgement)
+        socket.push(.delta("Done"))
+        try await waitUntil { model.streamingText == "Done" }
+        #expect(module.calls == ["fake_write"])
+    }
+
+    @Test(arguments: [true, false])
+    func cancelledApprovalCannotRunBeforeTheTurnFinishes(approvalRequested: Bool) async throws {
+        let model = makeModel()
+        let module = FakeToolModule()
+        model.modules = [module]
+        let socket = await sendHi(model)
+        socket.push(.toolCall(id: "c1", name: "fake_write", args: [:]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        if approvalRequested { await model.approve("c1") }
+        #expect(module.calls.isEmpty)
+        socket.push(try ChatJSON.decoder.decode(ServerFrame.self, from: Data(#"{"type":"tool_cancelled","id":"c1"}"#.utf8)))
+        socket.push(try ChatJSON.decoder.decode(ServerFrame.self, from: Data(#"{"type":"tool_approved","id":"c1"}"#.utf8)))
+        socket.push(.delta("Still responding"))
+        try await waitUntil { model.streamingText == "Still responding" }
+        await model.approve("c1")
+        #expect(module.calls.isEmpty)
+        #expect(model.pendingApprovals.isEmpty)
+        #expect(socket.sent.count == (approvalRequested ? 3 : 2))
     }
 
     @Test func denyRepliesDeclined() async throws {
@@ -310,6 +363,11 @@ struct ChatModelTests {
         try await waitUntil { !model.pendingApprovals.isEmpty }
         #expect(store.projects[0].stages.isEmpty)
         await model.approve("create-roadmap")
+        socket.push(.toolApproved(id: "create-roadmap"))
+        try await waitUntil {
+            if case .toolResult(id: "create-roadmap", ok: true, content: _) = socket.sent.last { return true }
+            return false
+        }
         #expect(store.projects[0].stages.first?.name == "Capture")
         #expect(model.pendingApprovals.isEmpty)
         if case let .toolResult(id, ok, _) = socket.sent.last {
@@ -380,6 +438,11 @@ struct ChatModelTests {
             await model.deny("edit-roadmap")
         } else {
             await model.approve("edit-roadmap")
+            socket.push(.toolApproved(id: "edit-roadmap"))
+            try await waitUntil {
+                if case .toolResult(id: "edit-roadmap", ok: _, content: _) = socket.sent.last { return true }
+                return false
+            }
         }
         #expect(model.pendingApprovals.isEmpty)
         if decision == "approve" {

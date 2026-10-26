@@ -15,7 +15,9 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
     case delta(String)
     case done(text: String, compute: String, toolsUsed: [String], turnID: String? = nil, metrics: ServerMetrics? = nil)
     case metrics(turnID: String, metrics: ServerMetrics)
-    case error(String)
+    case error(String, turnID: String? = nil, metrics: ServerMetrics? = nil)
+    case toolApproved(id: String)
+    case toolCancelled(id: String)
     /// A call to one of the tools offered in `hello`; answer with `ClientFrame.toolResult`.
     case toolCall(id: String, name: String, args: JSONValue)
     case unknown
@@ -47,7 +49,13 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
                 self = .unknown
             }
         case "error":
-            self = .error(try c.decode(String.self, forKey: .message))
+            self = .error(try c.decode(String.self, forKey: .message),
+                          turnID: try? c.decode(String.self, forKey: .turnId),
+                          metrics: try? c.decode(ServerMetrics.self, forKey: .metrics))
+        case "tool_approved":
+            self = .toolApproved(id: try c.decode(String.self, forKey: .id))
+        case "tool_cancelled":
+            self = .toolCancelled(id: try c.decode(String.self, forKey: .id))
         case "tool_call":
             var args = (try? c.decode(JSONValue.self, forKey: .args)) ?? [:]
             if case .object = args {} else { args = [:] }
@@ -64,6 +72,7 @@ public enum ClientFrame: Encodable, Equatable, Sendable {
     case hello(tools: [ToolDefinition])
     case message(text: String, context: String?, turnID: String? = nil, diagnostics: Bool = false)
     case toolResult(id: String, ok: Bool, content: String)
+    case toolApproval(id: String)
 
     private enum CodingKeys: String, CodingKey { case type, tools, text, context, id, ok, content, turnID = "turn_id", diagnostics }
     private enum ToolKeys: String, CodingKey { case name, description, parameters }
@@ -89,6 +98,9 @@ public enum ClientFrame: Encodable, Equatable, Sendable {
                 try c.encode(true, forKey: .diagnostics)
                 try c.encodeIfPresent(turnID, forKey: .turnID)
             }
+        case .toolApproval(let id):
+            try c.encode("tool_approval", forKey: .type)
+            try c.encode(id, forKey: .id)
         case .toolResult(let id, let ok, let content):
             try c.encode("tool_result", forKey: .type)
             try c.encode(id, forKey: .id)

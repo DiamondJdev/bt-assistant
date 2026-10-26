@@ -8,11 +8,11 @@ function heartbeatLine({ ts, project, language }) {
 	return JSON.stringify({ ts, editor: "vscode", project, language }) + "\n";
 }
 
-/** Returns `shouldSend(project, language, nowMs)`: true when the pair changed or `intervalMs` passed. */
+/** Forced sends restart the interval, as do changed pairs and normal sends. */
 function createThrottle(intervalMs = THROTTLE_MS) {
 	let last = null;
-	return (project, language, nowMs) => {
-		if (last && last.project === project && last.language === language && nowMs - last.at < intervalMs) {
+	return (project, language, nowMs, force = false) => {
+		if (!force && last && last.project === project && last.language === language && nowMs - last.at < intervalMs) {
 			return false;
 		}
 		last = { project, language, at: nowMs };

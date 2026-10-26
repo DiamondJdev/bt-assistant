@@ -45,9 +45,15 @@ struct BTMacApp: App {
         Window("BT", id: "main") {
             BTAppView(store: store)
                 .task {
+                    (store.calendarSource as? CalendarStore)?.refreshAccess()
                     if let calendar = store.calendarSource as? CalendarStore, calendar.access == .notDetermined {
                         await calendar.requestAccess()
                     }
+                    store.tick()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    (store.calendarSource as? CalendarStore)?.refreshAccess()
+                    store.tick()
                 }
         }
         .windowStyle(.hiddenTitleBar)

@@ -44,7 +44,7 @@ make test SUITE=server FILTER=telemetry
 make test SUITE=all
 ```
 
-`FILTER` goes to Swift's `--filter`, pytest's `-k` and Node's `--test-name-pattern`. A filter that selects zero tests fails, since Swift otherwise reports success. Suites stop at the first failure.
+`FILTER` goes to Swift's `--filter`, pytest's `-k` and Node's `--test-name-pattern`. A filtered runner may select no tests if another runner in the requested suite has a match. The command fails when none of the runners select tests. Test failures and runner errors still stop the suite immediately.
 
 The wrapper has its own tests, which mock every subprocess:
 
