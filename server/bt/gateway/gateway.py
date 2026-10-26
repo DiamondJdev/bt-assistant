@@ -32,6 +32,7 @@ STATIC = Path(__file__).parents[1] / "client"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 	CONFIG.validate_access()
+	CONFIG.validate_llm()
 	app.state.voice_busy = False
 	app.state.voice_services = None
 	if CONFIG.voice_enabled:

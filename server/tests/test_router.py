@@ -250,3 +250,74 @@ def test_telemetry_records_each_model_call_and_client_tool_wait(monkeypatch):
     assert turn.snapshot()['tool_wait_ms'] >= 0
     assert published, 'live metrics should be published after each call'
     assert 'No events' not in str(turn.snapshot())
+
+
+@pytest.fixture
+def openai_mode(monkeypatch, providers):
+    monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, llm_provider='openai', openai_api_key='sk-test'))
+    return providers
+
+
+def test_openai_default_never_touches_ollama(openai_mode):
+    calls = openai_mode(openai=[_reply('Cloud answer')])
+    result = asyncio.run(router.respond([], 'hello'))
+    assert (result.text, result.compute) == ('Cloud answer', 'openai')
+    assert [key for key, _ in calls] == ['openai'] and 'ollama' not in router._PROVIDERS
+
+
+def test_openai_default_streams_deltas(openai_mode, monkeypatch):
+    openai_mode()
+    seen = []
+    async def stream(provider, messages, tools=None, tool_choice=None, on_text=None):
+        seen.append(provider.key)
+        await on_text('Hi')
+        return _reply('Hi')
+    monkeypatch.setattr(router, 'stream_complete', stream)
+    deltas = []
+    async def on_delta(text):
+        deltas.append(text)
+    result = asyncio.run(router.respond([], 'hello', on_delta=on_delta))
+    assert (seen, deltas, result.compute) == (['openai'], ['Hi'], 'openai')
+
+
+def test_openai_default_dispatches_server_and_client_tools(openai_mode, monkeypatch):
+    monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, tools_enabled=True))
+    monkeypatch.setattr(router, 'openai_tools', lambda: list(SERVER_TOOLS))
+    async def dispatch(name, arguments, ctx):
+        return 'memory'
+    monkeypatch.setattr(router, 'dispatch_call', dispatch)
+    server = SimpleNamespace(id='s1', function=SimpleNamespace(name='memory_search', arguments='{}'))
+    client = SimpleNamespace(id='c1', function=SimpleNamespace(name='calendar_list_events', arguments='{}'))
+    calls = openai_mode(openai=[_reply(None, [server, client]), _reply('Done.')])
+    async def call_client(call_id, name, raw):
+        return 'events'
+    ctx = SimpleNamespace(used=[])
+    result = asyncio.run(router.respond([], 'today?', ctx=ctx, client_tools=[CLIENT_TOOL], call_client=call_client))
+    assert (result.text, result.compute) == ('Done.', 'openai')
+    assert [key for key, _ in calls] == ['openai', 'openai']
+    assert [m['content'] for m in calls[-1][1][-2:]] == ['memory', 'events']
+
+
+def test_openai_default_errors_propagate_without_local_retry(openai_mode):
+    calls = openai_mode(openai=[openai.APIConnectionError(request=_REQUEST)])
+    with pytest.raises(openai.APIConnectionError):
+        asyncio.run(router.respond([], 'hello'))
+    assert [key for key, _ in calls] == ['openai']
+
+
+def test_openai_default_degenerate_reply_is_not_retried(openai_mode):
+    calls = openai_mode(openai=[_reply("I don't know")])
+    result = asyncio.run(router.respond([], 'hello'))
+    assert result.text == "I don't know" and len(calls) == 1
+
+
+def test_explicit_local_overrides_openai_default(openai_mode):
+    calls = openai_mode(ollama=[_reply('Local answer')])
+    result = asyncio.run(router.respond([], 'hello', provider='local'))
+    assert (result.compute, [key for key, _ in calls]) == ('ollama', ['ollama'])
+
+
+def test_missing_openai_key_error_is_clear(providers, monkeypatch):
+    monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, openai_api_key=None))
+    with pytest.raises(RuntimeError, match='^OPENAI_API_KEY is not set$'):
+        router._provider('openai')
