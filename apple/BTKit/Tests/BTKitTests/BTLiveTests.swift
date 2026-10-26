@@ -20,6 +20,15 @@ struct BTLiveTests {
         #expect(messages[2].time == Self.thursday)
     }
 
+    @Test func serverMemoriesBecomeTaggedMemories() {
+        let server = [ServerMemory(name: "lab-room", description: "The CHEM lab is in room 210", type: "user", updated: "2026-10-21T18:05:00Z")]
+        let memory = BTLive.memories(server)[0]
+        #expect(memory.id == "lab-room")
+        #expect(memory.text == "The CHEM lab is in room 210")
+        #expect(memory.tag == "USER")
+        #expect(memory.createdAt == Date(timeIntervalSince1970: 1_792_605_900))
+    }
+
     @Test func emptyStreamShowsEllipsisAndNoStreamAddsNothing() {
         #expect(BTLive.messages(turns: [], streaming: "", now: Self.thursday).map(\.text) == ["…"])
         #expect(BTLive.messages(turns: [], streaming: nil, now: Self.thursday).isEmpty)
@@ -51,4 +60,5 @@ struct BTLiveTests {
 private struct EmptyChatAPI: ChatAPI {
     func sessions() async throws -> [ChatSessionSummary] { [] }
     func history(sessionID: String) async throws -> [ChatTurn] { [] }
+    func memories() async throws -> [ServerMemory] { [] }
 }

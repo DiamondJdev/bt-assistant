@@ -9,7 +9,9 @@ struct BTConversation: View {
     /// Server turns when live, else the selected sample thread.
     private var shown: [Message] {
         guard let chat = store.chat, store.btIsLive else { return thread?.messages ?? [] }
-        return BTLive.messages(turns: chat.turns, streaming: chat.streamingText, now: store.now)
+        return BTPerformance.measure(.messageTransform) {
+            BTLive.messages(turns: chat.turns, streaming: chat.streamingText, now: store.now)
+        }
     }
 
     var body: some View {
@@ -26,7 +28,7 @@ struct BTConversation: View {
                 .defaultScrollAnchor(.bottom)
             // Text too, so a streaming reply keeps the bottom in view.
             .onChange(of: [shown.last?.id, shown.last?.text, store.chat?.pendingApprovals.last?.id]) {
-                proxy.scrollTo("bottom", anchor: .bottom)
+                BTPerformance.measure(.scroll) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
     }
@@ -100,8 +102,10 @@ struct BTMessageView: View {
 
     /// Inline markdown (bold, code, links) from the server; plain text when it doesn't parse.
     static func markdown(_ text: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        BTPerformance.measure(.markdown) {
+            let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        }
     }
 }
 

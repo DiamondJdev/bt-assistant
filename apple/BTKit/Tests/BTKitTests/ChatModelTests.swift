@@ -74,6 +74,34 @@ struct ChatModelTests {
         #expect(socket.sent.last == .message(text: "Hi", context: "Tools ready"))
     }
 
+    #if BT_DIAGNOSTICS
+    @Test func diagnosticTurnIsTaggedTimedAndMatchedToItsMetrics() async throws {
+        let model = makeModel()
+        model.enableDiagnostics()
+        let socket = await sendHi(model)
+        guard case .message(_, _, let turnID?, true) = socket.sent.last else {
+            Issue.record("Expected a diagnostic message, got \(String(describing: socket.sent.last))")
+            return
+        }
+        socket.push(.metrics(turnID: "someone-else", metrics: ServerMetrics(durationMs: 1)))
+        socket.push(.delta("Hel"))
+        socket.push(.delta("lo"))
+        socket.push(.done(text: "Hello", compute: "ollama", toolsUsed: [], turnID: turnID, metrics: ServerMetrics(durationMs: 42)))
+        try await waitUntil { model.streamingText == nil }
+
+        let turn = try #require(DiagnosticsRecorder.shared.snapshot().turns.first { $0.id == turnID })
+        #expect(turn.status == .completed)
+        #expect(turn.chunks == 2)
+        #expect(turn.firstTextMs != nil)
+        #expect(turn.server?.durationMs == 42)
+    }
+    #endif
+
+    @Test func plainModelSendsNoDiagnostics() async {
+        let socket = await sendHi(makeModel())
+        #expect(socket.sent.last == .message(text: "Hi", context: nil))
+    }
+
     @Test func nonApprovalCallRunsAndRepliesOK() async throws {
         let model = makeModel()
         let module = FakeToolModule()
@@ -241,6 +269,148 @@ struct ChatModelTests {
         #expect(model.errorMessage == nil)
     }
 
+    @Test func liveStoreSendsTodayAsksToTheServerInANewConversation() async throws {
+        let model = makeModel()
+        await model.select("s1")
+        let store = AppStore(chat: model)
+        let localThreads = store.threads
+
+        let threadID = store.sendToBT("Move CHEM review to after work")
+
+        #expect(threadID == nil)
+        #expect(store.threads == localThreads)
+        #expect(model.selectedSessionID == nil)
+        try await waitUntil { factory.made.last?.sent.last == .message(text: "Move CHEM review to after work", context: nil) }
+        #expect(factory.urls.last == URL(string: "wss://bt.example.ts.net/chat/ws")!)
+    }
+
+    @Test func roadmapQuestionsStayInTheSameConversationAndSaveOnlyAfterApproval() async throws {
+        let model = makeModel()
+        let store = AppStore(chat: model)
+        store.projects = [Project(id: "notes", name: "Notes", path: "", stack: "Swift")]
+        model.modules = [RoadmapModule(store: store)]
+        #expect(await store.draftRoadmap(projectID: "notes"))
+        #expect(store.route == .bt)
+        let socket = factory.made.last!
+        #expect(socket.sent.first == .hello(tools: model.modules.flatMap(\.tools)))
+        #expect(model.turns.first?.text.contains("Project ID: notes") == true)
+        socket.push(.session(id: "roadmap-session"))
+        socket.push(.done(text: "What should the first version of Notes do?", compute: "ollama", toolsUsed: []))
+        try await waitUntil { !model.isSending }
+        #expect(store.projects[0].stages.isEmpty)
+
+        model.draft = "Save and search plain-text notes."
+        await model.send()
+        #expect(factory.made.count == 1)
+        #expect(model.selectedSessionID == "roadmap-session")
+        #expect(model.turns.map(\.role) == ["user", "bt", "user"])
+        socket.push(.toolCall(id: "create-roadmap", name: "roadmap_create", args: [
+            "project_id": "notes", "stages": [["name": "Capture", "tasks": ["Save plain-text notes"]]],
+        ]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        #expect(store.projects[0].stages.isEmpty)
+        await model.approve("create-roadmap")
+        #expect(store.projects[0].stages.first?.name == "Capture")
+        #expect(model.pendingApprovals.isEmpty)
+        if case let .toolResult(id, ok, _) = socket.sent.last {
+            #expect(id == "create-roadmap" && ok)
+        } else {
+            Issue.record("No successful roadmap tool result")
+        }
+    }
+
+    @Test func denyingRoadmapCreationLeavesTheProjectUnchanged() async throws {
+        let model = makeModel()
+        let store = AppStore(chat: model)
+        store.projects = [Project(id: "notes", name: "Notes", path: "", stack: "Swift")]
+        model.modules = [RoadmapModule(store: store)]
+        _ = await store.draftRoadmap(projectID: "notes")
+        let socket = factory.made.last!
+        socket.push(.toolCall(id: "denied-roadmap", name: "roadmap_create", args: [
+            "project_id": "notes", "stages": [["name": "Capture", "tasks": ["Save notes"]]],
+        ]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        await model.deny("denied-roadmap")
+        #expect(store.projects[0].stages.isEmpty)
+    }
+
+    @Test func startingRoadmapDoesNotInterruptAReplyOrDiscardAnUnsentDraft() async throws {
+        let model = makeModel()
+        let store = AppStore(chat: model)
+        store.projects = [Project(id: "notes", name: "Notes", path: "", stack: "Swift")]
+        model.draft = "Keep my draft"
+        #expect(await store.draftRoadmap(projectID: "notes") == false)
+        #expect(model.draft == "Keep my draft")
+        let socket = await sendHi(model)
+        let sent = socket.sent
+        #expect(await store.draftRoadmap(projectID: "notes") == false)
+        #expect(socket.sent == sent)
+        #expect(model.isSending)
+    }
+
+    @Test(arguments: ["approve", "deny", "stale"])
+    func roadmapEditsRequireApprovalAndProtectConcurrentChanges(_ decision: String) async throws {
+        let model = makeModel()
+        let store = AppStore(chat: model)
+        store.projects = [Project(id: "notes", name: "Notes", path: "", stack: "Swift", stages: [
+            RoadmapStage(id: "stage", index: 1, name: "Capture", status: .current,
+                         tasks: [RoadmapTask(id: "task", title: "Save notes", status: .todo)]),
+        ])]
+        model.modules = [RoadmapModule(store: store)]
+        #expect(await store.editRoadmap(projectID: "notes"))
+        #expect(store.route == .bt)
+        #expect(model.turns.first?.text.contains("Project ID: notes") == true)
+        let socket = factory.made.last!
+        socket.push(.toolCall(id: "read-roadmap", name: "roadmap_get", args: ["project_id": "notes"]))
+        try await waitUntil { socket.sent.count == 3 }
+        #expect(model.pendingApprovals.isEmpty)
+        socket.push(.done(text: "What changed in the roadmap?", compute: "ollama", toolsUsed: ["roadmap_get"]))
+        try await waitUntil { !model.isSending }
+        model.draft = "Mark Save notes done."
+        await model.send()
+        socket.push(.toolCall(id: "edit-roadmap", name: "roadmap_update", args: [
+            "project_id": "notes", "expected_revision": .string(try RoadmapEditing.revision(store.projects[0].stages)),
+            "stages": [["id": "stage", "name": "Capture", "tasks": [["id": "task", "title": "Save notes", "status": "done"]]]],
+        ]))
+        try await waitUntil { !model.pendingApprovals.isEmpty }
+        #expect(store.projects[0].stages[0].tasks[0].status == .todo)
+        if decision == "stale" { store.projects[0].stages[0].name = "Newer manual title" }
+        let before = store.projects
+        if decision == "deny" {
+            await model.deny("edit-roadmap")
+        } else {
+            await model.approve("edit-roadmap")
+        }
+        #expect(model.pendingApprovals.isEmpty)
+        if decision == "approve" {
+            #expect(store.projects[0].stages[0].status == .done)
+            #expect(store.projects[0].stages[0].progress == 1)
+        } else {
+            #expect(store.projects == before)
+        }
+        if case let .toolResult(_, ok, _) = socket.sent.last {
+            #expect(ok == (decision == "approve"))
+        } else { Issue.record("Missing roadmap edit tool result") }
+    }
+
+    @Test func editingRoadmapPreservesAnUnsentDraft() async {
+        let model = makeModel()
+        let store = AppStore(chat: model)
+        store.projects = [Project(id: "notes", name: "Notes", path: "", stack: "Swift", stages: [
+            RoadmapStage(index: 1, name: "Build", status: .current),
+        ])]
+        model.draft = "Keep this question"
+        #expect(await store.editRoadmap(projectID: "notes") == false)
+        #expect(model.draft == "Keep this question")
+        #expect(factory.made.isEmpty)
+    }
+
+    @Test func loadingSessionsAlsoLoadsMemories() async {
+        let model = makeModel()
+        await model.loadSessions()
+        #expect(model.memories == api.memories)
+    }
+
     @Test func invalidAddressShowsSetupState() {
         let model = ChatModel()
         model.serverAddress = "bt.example.ts.net"
@@ -262,7 +432,10 @@ private final class FakeChatAPI: ChatAPI, @unchecked Sendable {
     let summaries = [ChatSessionSummary(id: "s1", label: "Chemistry", updatedAt: 2)]
     let turns = [ChatTurn(id: "t1", ts: 1, role: "user", text: "Study plan", compute: nil)]
 
+    let memories = [ServerMemory(name: "lab-room", description: "Lab is in 210", type: "user", updated: "2026-10-21T18:05:00Z")]
     var historyFails = false
+
+    func memories() async throws -> [ServerMemory] { memories }
 
     func sessions() async throws -> [ChatSessionSummary] { summaries }
     func history(sessionID: String) async throws -> [ChatTurn] {

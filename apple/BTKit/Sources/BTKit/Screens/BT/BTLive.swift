@@ -14,11 +14,25 @@ enum BTLive {
         guard let streaming else { return saved }
         return saved + [Message(id: streamingID, role: .bt, text: streaming.isEmpty ? "…" : streaming, time: now)]
     }
+
+    /// The server's memory index as "BT remembers" rows, tagged by memory type.
+    static func memories(_ server: [ServerMemory]) -> [Memory] {
+        let iso = ISO8601DateFormatter()
+        return server.map {
+            Memory(id: $0.name, text: $0.description, tag: $0.type.uppercased(), createdAt: iso.date(from: $0.updated) ?? .distantPast)
+        }
+    }
 }
 
 extension AppStore {
     /// True when BT talks to a server instead of the sample responder.
     var btIsLive: Bool { chat?.endpoints != nil }
+
+    /// Server memories when live, else the sample ones.
+    var shownMemories: [Memory] {
+        guard let chat, btIsLive else { return memories }
+        return BTLive.memories(chat.memories)
+    }
 }
 
 extension BTFormat {

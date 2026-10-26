@@ -21,4 +21,11 @@ struct ContextSnapshotTests {
         #expect(contextSnapshot(["abc", "de"], budget: 5) == "abc")
         #expect(contextSnapshot(["abc", "de"], budget: 6) == "abc\nde")
     }
+
+    @Test func omittedCountMatchesWhatTheSnapshotLeavesOut() {
+        let long = String(repeating: "x", count: 1990)
+        #expect(omittedSnapshotCount([long, "too long to fit", "ok", nil, ""]) == 1)
+        #expect(contextSnapshot([long, "too long to fit", "ok"]) == long + "\nok")
+        #expect(omittedSnapshotCount(["a\nb", "c"]) == 0)
+    }
 }

@@ -13,14 +13,15 @@ enum ChatJSON {
 public enum ServerFrame: Decodable, Equatable, Sendable {
     case session(id: String)
     case delta(String)
-    case done(text: String, compute: String, toolsUsed: [String])
+    case done(text: String, compute: String, toolsUsed: [String], turnID: String? = nil, metrics: ServerMetrics? = nil)
+    case metrics(turnID: String, metrics: ServerMetrics)
     case error(String)
     /// A call to one of the tools offered in `hello`; answer with `ClientFrame.toolResult`.
     case toolCall(id: String, name: String, args: JSONValue)
     case unknown
 
     private enum CodingKeys: String, CodingKey {
-        case type, sessionId, text, compute, toolsUsed, message, id, name, args
+        case type, sessionId, text, compute, toolsUsed, message, id, name, args, turnId, metrics
     }
 
     public init(from decoder: any Decoder) throws {
@@ -34,8 +35,17 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
             self = .done(
                 text: try c.decode(String.self, forKey: .text),
                 compute: try c.decode(String.self, forKey: .compute),
-                toolsUsed: try c.decode([String].self, forKey: .toolsUsed)
+                toolsUsed: try c.decode([String].self, forKey: .toolsUsed),
+                turnID: try? c.decode(String.self, forKey: .turnId),
+                metrics: try? c.decode(ServerMetrics.self, forKey: .metrics)
             )
+        case "metrics":
+            if let turnID = try? c.decode(String.self, forKey: .turnId),
+               let metrics = try? c.decode(ServerMetrics.self, forKey: .metrics) {
+                self = .metrics(turnID: turnID, metrics: metrics)
+            } else {
+                self = .unknown
+            }
         case "error":
             self = .error(try c.decode(String.self, forKey: .message))
         case "tool_call":
@@ -52,10 +62,10 @@ public enum ServerFrame: Decodable, Equatable, Sendable {
 /// never sends `tool_call` to a client that offered none.
 public enum ClientFrame: Encodable, Equatable, Sendable {
     case hello(tools: [ToolDefinition])
-    case message(text: String, context: String?)
+    case message(text: String, context: String?, turnID: String? = nil, diagnostics: Bool = false)
     case toolResult(id: String, ok: Bool, content: String)
 
-    private enum CodingKeys: String, CodingKey { case type, tools, text, context, id, ok, content }
+    private enum CodingKeys: String, CodingKey { case type, tools, text, context, id, ok, content, turnID = "turn_id", diagnostics }
     private enum ToolKeys: String, CodingKey { case name, description, parameters }
 
     public func encode(to encoder: any Encoder) throws {
@@ -71,10 +81,14 @@ public enum ClientFrame: Encodable, Equatable, Sendable {
                 try t.encode(tool.description, forKey: .description)
                 try t.encode(tool.parameters, forKey: .parameters)
             }
-        case .message(let text, let context):
+        case .message(let text, let context, let turnID, let diagnostics):
             try c.encode("message", forKey: .type)
             try c.encode(text, forKey: .text)
             try c.encodeIfPresent(context, forKey: .context)
+            if diagnostics {
+                try c.encode(true, forKey: .diagnostics)
+                try c.encodeIfPresent(turnID, forKey: .turnID)
+            }
         case .toolResult(let id, let ok, let content):
             try c.encode("tool_result", forKey: .type)
             try c.encode(id, forKey: .id)
@@ -88,6 +102,15 @@ public struct ChatSessionSummary: Decodable, Identifiable, Equatable, Sendable {
     public let id: String
     public let label: String
     public let updatedAt: Double
+}
+
+/// One entry of the server's memory index (`GET /memories`).
+public struct ServerMemory: Decodable, Equatable, Sendable {
+    public let name: String
+    public let description: String
+    public let type: String
+    /// ISO 8601, UTC.
+    public let updated: String
 }
 
 public struct ChatTurn: Decodable, Identifiable, Equatable, Sendable {
@@ -118,6 +141,7 @@ public struct ChatEndpoints: Equatable, Sendable {
     }
 
     public var sessionsURL: URL { url(path: "/sessions") }
+    public var memoriesURL: URL { url(path: "/memories") }
 
     public func historyURL(sessionID: String) -> URL {
         url(path: "/history", query: [URLQueryItem(name: "session_id", value: sessionID)])

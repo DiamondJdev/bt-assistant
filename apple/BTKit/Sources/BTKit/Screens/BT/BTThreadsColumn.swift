@@ -94,7 +94,7 @@ private struct BTThreadRow: View {
 struct BTMemoryList: View {
     @Bindable var store: AppStore
 
-    private var sorted: [Memory] { store.memories.sorted { $0.createdAt > $1.createdAt } }
+    private var sorted: [Memory] { store.shownMemories.sorted { $0.createdAt > $1.createdAt } }
 
     var body: some View {
         let all = sorted
