@@ -78,3 +78,23 @@ def test_voice_recall_searches_the_last_two_user_turns(monkeypatch):
         assert notes == ['read my to-do list Yes.']
         await service.cleanup()
     asyncio.run(run())
+
+
+def test_voice_openai_mode_prompt_has_no_no_think_and_keeps_turn_note(monkeypatch):
+    async def run():
+        seen = []
+        async def stream(self, context):
+            self._compose_system_instruction()
+            seen.append((type(self).__name__, self._settings.system_instruction, self.turn_note))
+            return Stream()
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', stream)
+        monkeypatch.setattr(OpenAILLMService, 'get_chat_completions', stream)
+        monkeypatch.setattr(routing, 'CONFIG', replace(routing.CONFIG, llm_provider='openai', openai_api_key='test'))
+        monkeypatch.setattr(routing, 'render_system_prompt', lambda **kw: 'prompt')
+        monkeypatch.setattr(routing, 'turn_note', lambda text, **kw: 'NOTE')
+        service = routing.RoutedLLMService('s1')
+        out = await service.get_chat_completions(_context())
+        [chunk async for chunk in out]
+        assert seen == [('CloudLLMService', 'prompt', 'NOTE')]
+        await service.cleanup()
+    asyncio.run(run())

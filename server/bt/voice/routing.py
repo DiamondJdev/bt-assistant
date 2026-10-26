@@ -1,4 +1,4 @@
-"""Local-first streaming with fallback before the first response token."""
+"""Voice streaming on the configured provider; Ollama mode falls back to cloud before the first token."""
 
 import asyncio
 import json
@@ -98,13 +98,13 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 		user_text = next((m.get("content", "") for m in reversed(context.get_messages()) if m.get("role") == "user"), "")
 		self._refresh_prompt(context)
 		_trim(context)
-		use_cloud = isinstance(user_text, str) and wants_escalation(user_text)
+		use_cloud = CONFIG.llm_provider == "openai" or (isinstance(user_text, str) and wants_escalation(user_text))
 
 		async def chunks():
 			providers = [self._cloud] if use_cloud else [self, self._cloud]
 			for provider in providers:
 				if provider is None:
-					raise RuntimeError("Cloud fallback requires OPENAI_API_KEY")
+					raise RuntimeError("OpenAI requires OPENAI_API_KEY")
 				stream = None
 				emitted = False
 				self.compute = "ollama" if provider is self else "openai"
