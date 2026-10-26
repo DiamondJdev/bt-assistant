@@ -88,3 +88,18 @@ def test_readiness_checks_model_and_reports_dependency_failure(client, monkeypat
 
 def test_config_reports_model_for_status_display(client):
     assert client.get('/config').json()['model'] == gateway.CONFIG.ollama_model
+
+
+def test_memories_lists_the_index_without_bodies(client, monkeypatch, tmp_path):
+    from bt.library import MemoryStore
+    memories = MemoryStore(tmp_path)
+    memories.write('lab-room', 'The CHEM lab is in room 210', 'Room 210, second floor.', type='user')
+    monkeypatch.setattr(gateway, 'get_memory', lambda: memories)
+
+    [entry] = client.get('/memories').json()
+
+    assert entry['name'] == 'lab-room'
+    assert entry['description'] == 'The CHEM lab is in room 210'
+    assert entry['type'] == 'user'
+    assert entry['updated']
+    assert 'body' not in entry

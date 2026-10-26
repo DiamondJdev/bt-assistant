@@ -19,6 +19,7 @@ from bt.config import CONFIG
 from bt.gateway.chat_ws import ChatText
 from bt.gateway.chat_ws import router as chat_ws_router
 from bt.gateway.origin import OriginMiddleware
+from bt.library import get_memory
 from bt.llm.router import respond
 from bt.tools.registry import default_context
 from bt.transcript.store import Turn, get_store
@@ -114,6 +115,12 @@ def config() -> dict[str, bool | str]:
 @app.get("/sessions")
 async def sessions() -> list[dict]:
 	return await asyncio.to_thread(store.list_sessions)
+
+
+@app.get("/memories")
+async def memories() -> list[dict[str, str]]:
+	index = await asyncio.to_thread(get_memory().index)
+	return [{"name": m.name, "description": m.description, "type": m.type, "updated": m.updated} for m in index]
 
 
 @app.post("/sessions")

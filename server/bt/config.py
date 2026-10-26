@@ -23,6 +23,15 @@ def _env_flag(name: str) -> bool:
 _TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 
 
+def _positive_int(name: str) -> int | None:
+	raw = os.environ.get(name, "").strip()
+	if not raw:
+		return None
+	if not raw.isdigit() or int(raw) <= 0:
+		raise ValueError(f"{name} must be a positive whole number of tokens, got {raw!r}")
+	return int(raw)
+
+
 def _private_bind(host: str) -> bool:
 	if host == "localhost":
 		return True
@@ -50,6 +59,10 @@ class Config:
 	# Cloud fallback.
 	openai_api_key: str | None = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY"))
 	openai_model: str = field(default_factory=lambda: os.environ.get("BT_OPENAI_MODEL", "gpt-5.6-luna"))
+	context_limit_provider: str | None = field(default_factory=lambda: os.environ.get("BT_CONTEXT_LIMIT_PROVIDER"))
+	context_limit_model: str | None = field(default_factory=lambda: os.environ.get("BT_CONTEXT_LIMIT_MODEL"))
+	# Only reported when provider and model match; see docs/DEVELOPMENT.md.
+	context_limit: int | None = field(default_factory=lambda: _positive_int("BT_CONTEXT_LIMIT"))
 
 	# TTS (Model Responses)
 	piper_voice: str = field(default_factory=lambda: os.environ.get("BT_PIPER_VOICE", "en_US-lessac-medium"))

@@ -47,6 +47,49 @@ def test_new_socket_announces_a_session_and_streams_a_turn(client, monkeypatch):
     assert _roles(client, sid) == ['user', 'bt']
 
 
+def test_opt_in_diagnostics_correlate_done_and_live_metrics(client, monkeypatch):
+    turn_id = '7533469b-893b-4c9b-9666-e25698b2714b'
+    async def fake(messages, text, **kw):
+        await kw['telemetry'].publish()
+        return LLMResponse('Hello', 'ollama')
+    _install(monkeypatch, fake)
+    with client.websocket_connect('/chat/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'message', 'text': 'Hi', 'diagnostics': True, 'turn_id': turn_id})
+        live = ws.receive_json()
+        assert live['type'] == 'metrics'
+        done = ws.receive_json()
+    assert live['type'] == 'metrics' and live['turn_id'] == turn_id
+    assert done['turn_id'] == turn_id
+    assert done['metrics']['history_turns'] == 1
+    assert done['metrics']['context_chars'] == 0
+    assert done['metrics']['calls'] == []
+
+
+def test_diagnostics_generate_id_and_correlate_private_errors(client, monkeypatch, caplog):
+    async def fake(*args, **kwargs):
+        raise RuntimeError('secret prompt and credential')
+    _install(monkeypatch, fake)
+    with client.websocket_connect('/chat/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'message', 'text': 'Hi', 'diagnostics': True})
+        error = ws.receive_json()
+    from uuid import UUID
+    assert UUID(error['turn_id'])
+    assert error['metrics']['status'] == 'error'
+    assert error['turn_id'] in caplog.text
+    assert 'secret prompt and credential' not in caplog.text
+
+
+@pytest.mark.parametrize('turn_id', ['x' * 100, 'not-a-uuid', 123])
+def test_invalid_turn_ids_are_rejected(client, monkeypatch, turn_id):
+    _install(monkeypatch, _hello)
+    with client.websocket_connect('/chat/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'message', 'text': 'Hi', 'turn_id': turn_id})
+        assert ws.receive_json()['type'] == 'error'
+
+
 def test_existing_session_is_continued(client, monkeypatch):
     _install(monkeypatch, _hello)
     sid = client.post('/sessions').json()['session_id']

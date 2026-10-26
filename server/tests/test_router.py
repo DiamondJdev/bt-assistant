@@ -220,3 +220,33 @@ def test_context_goes_on_the_latest_user_message(monkeypatch):
     asyncio.run(router.respond([{'role': 'user', 'content': 'Start'}], 'Start', context='Pomodoro idle'))
     assert 'App context: Pomodoro idle' in seen[0][-1]['content']
     assert 'Pomodoro idle' not in seen[0][0]['content']
+
+
+def test_telemetry_records_each_model_call_and_client_tool_wait(monkeypatch):
+    from bt.llm.telemetry import TurnMetrics
+    monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, tools_enabled=True))
+    monkeypatch.setattr(router, 'openai_tools', lambda: list(SERVER_TOOLS))
+    call = SimpleNamespace(id='c1', function=SimpleNamespace(name='calendar_list_events', arguments='{}'))
+    rounds = []
+    async def complete(provider, messages, tools=None, tool_choice=None, metrics=None):
+        rounds.append(metrics)
+        metrics.usage(SimpleNamespace(prompt_tokens=100 * len(rounds), completion_tokens=5))
+        return _reply(None, [call]) if len(rounds) == 1 else _reply('Nothing today.')
+    monkeypatch.setattr(router, '_complete', complete)
+    async def call_client(call_id, name, raw):
+        return 'No events'
+    published = []
+    async def on_update(snapshot):
+        published.append(snapshot)
+    turn = TurnMetrics('turn', on_update=on_update)
+    asyncio.run(router.respond(
+        [], 'what is on today?', ctx=SimpleNamespace(used=[]),
+        client_tools=[CLIENT_TOOL], call_client=call_client, telemetry=turn,
+    ))
+    calls = turn.snapshot()['calls']
+    assert [c['status'] for c in calls] == ['completed', 'completed']
+    assert [c['prompt_tokens'] for c in calls] == [100, 200]
+    assert 'tool_wait_ms' in calls[0] and 'tool_wait_ms' not in calls[1]
+    assert turn.snapshot()['tool_wait_ms'] >= 0
+    assert published, 'live metrics should be published after each call'
+    assert 'No events' not in str(turn.snapshot())
