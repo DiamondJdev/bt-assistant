@@ -184,7 +184,7 @@ $('chat').onsubmit = async event => {
     saveSession(response.session_id);
     await restoreHistory();
     await refreshSessions();
-    status(response.compute === 'openai' ? 'Answered using cloud fallback.' : '');
+    status(response.compute === 'openai' ? 'Answered by OpenAI.' : '');
   } catch (error) {
     status(error.message);
     $('message').value ||= text;
