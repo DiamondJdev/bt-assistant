@@ -33,6 +33,7 @@ def test_context_limit_is_optional(monkeypatch):
 
 def test_llm_provider_defaults_to_openai(monkeypatch):
     monkeypatch.delenv('BT_LLM_PROVIDER', raising=False)
+    monkeypatch.setenv('OPENAI_API_KEY', 'sk-test')
     assert Config().llm_provider == 'openai'
 
 
@@ -57,3 +58,24 @@ def test_openai_mode_requires_a_key(key):
 
 def test_ollama_mode_starts_without_a_key():
     Config(llm_provider='ollama', openai_api_key=None).validate_llm()
+
+
+def test_provider_default_follows_the_key(monkeypatch):
+    # Existing Ollama-only installs have no key and no BT_LLM_PROVIDER; they keep starting.
+    monkeypatch.delenv('BT_LLM_PROVIDER', raising=False)
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    assert Config().llm_provider == 'ollama'
+    monkeypatch.setenv('OPENAI_API_KEY', '  ')
+    assert Config().llm_provider == 'ollama'
+
+
+def test_provider_and_key_are_trimmed(monkeypatch):
+    monkeypatch.setenv('BT_LLM_PROVIDER', ' Ollama\r')
+    monkeypatch.setenv('OPENAI_API_KEY', ' sk-abc \r')
+    cfg = Config()
+    assert (cfg.llm_provider, cfg.openai_api_key) == ('ollama', 'sk-abc')
+
+
+def test_primary_model_follows_the_provider():
+    assert Config(llm_provider='openai', openai_model='gpt-x').primary_model == 'gpt-x'
+    assert Config(llm_provider='ollama', ollama_model='qwen').primary_model == 'qwen'

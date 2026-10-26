@@ -15,9 +15,15 @@ struct BTLiveTests {
         #expect(messages.map(\.role) == [.user, .bt, .bt])
         #expect(messages.map(\.text) == ["Hi", "Hello", "Wor"])
         #expect(messages[0].time == Date(timeIntervalSince1970: 10))
-        #expect(messages[1].isCloud)
-        #expect(!messages[2].isCloud)
+        #expect(messages[1].provider == "OpenAI")
+        #expect(messages[2].provider == nil)
         #expect(messages[2].time == Self.thursday)
+    }
+
+    @Test func providerNamesTheModelThatAnswered() {
+        #expect(BTLive.providerName("openai") == "OpenAI")
+        #expect(BTLive.providerName("ollama") == "Ollama")
+        #expect(BTLive.providerName(nil) == nil)
     }
 
     @Test func serverMemoriesBecomeTaggedMemories() {

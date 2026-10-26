@@ -39,7 +39,7 @@ function metaText({ ts, compute, input_mode: mode } = {}) {
   const parts = [];
   if (ts) parts.push(new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
   if (mode === 'voice') parts.push('voice');
-  if (compute) parts.push(compute === 'openai' ? 'cloud' : 'local');
+  if (compute) parts.push(compute === 'openai' ? 'OpenAI' : 'Ollama');
   return parts.join(' · ');
 }
 

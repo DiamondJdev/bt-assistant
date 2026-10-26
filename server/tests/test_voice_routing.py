@@ -133,7 +133,7 @@ def test_voice_history_trim_keeps_oversized_current_turn():
         {'role': 'user', 'content': 'old'}, {'role': 'assistant', 'content': 'old'},
         {'role': 'user', 'content': 'now'}, {'role': 'tool', 'content': big},
     ])
-    routing._trim(context)
+    routing._trim(context, routing.MAX_HISTORY_CHARS)
     assert [m['content'] for m in context.get_messages()] == ['now', big]
 
 
@@ -224,3 +224,13 @@ def test_voice_openai_mode_without_key_says_so(monkeypatch):
             await anext(stream)
         await service.cleanup()
     asyncio.run(run())
+
+
+def test_voice_history_budget_follows_the_provider(monkeypatch):
+    messages = [{'role': 'user' if i % 2 == 0 else 'assistant', 'content': 'x' * 1000} for i in range(40)]
+    small = LLMContext(messages=list(messages))
+    routing._trim(small, routing.MAX_HISTORY_CHARS)
+    assert len(small.get_messages()) < 40
+    large = LLMContext(messages=list(messages))
+    routing._trim(large, routing.CLOUD_HISTORY_CHARS)
+    assert len(large.get_messages()) == 40

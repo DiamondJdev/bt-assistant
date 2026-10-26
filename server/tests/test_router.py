@@ -321,3 +321,10 @@ def test_missing_openai_key_error_is_clear(providers, monkeypatch):
     monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, openai_api_key=None))
     with pytest.raises(RuntimeError, match='^OPENAI_API_KEY is not set$'):
         router._provider('openai')
+
+
+def test_openai_default_does_not_log_escalation(openai_mode, caplog):
+    openai_mode(openai=[_reply('Cloud answer')])
+    with caplog.at_level('INFO', logger='bt.llm'):
+        asyncio.run(router.respond([], 'hello'))
+    assert 'starting on the cloud model' not in caplog.text

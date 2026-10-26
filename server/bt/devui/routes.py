@@ -27,8 +27,7 @@ def config() -> JSONResponse:
 	return JSONResponse({
 		"dev_mode_enabled": CONFIG.developer_mode,
 		"provider": CONFIG.llm_provider,
-		"model": CONFIG.openai_model if CONFIG.llm_provider == "openai" else CONFIG.ollama_model,
-		"ollama_model": CONFIG.ollama_model,
+		"model": CONFIG.primary_model,
 		"cloud_enabled": bool(CONFIG.openai_api_key),
 		"piper_voice": CONFIG.piper_voice,
 		"whisper_model": CONFIG.whisper_model,

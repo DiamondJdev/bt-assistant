@@ -90,12 +90,8 @@ def health() -> dict[str, str]:
 async def ready() -> dict | JSONResponse:
 	try:
 		await asyncio.to_thread(store.list_sessions)
-		# OpenAI readiness checks config and storage only, not remote auth or model access.
+		# Startup validated the OpenAI settings; remote auth is not checked here.
 		if CONFIG.llm_provider == "openai":
-			try:
-				CONFIG.validate_llm()
-			except ValueError as e:
-				return _unavailable(str(e))
 			return {"status": "ready", "voice_enabled": CONFIG.voice_enabled}
 		async with httpx.AsyncClient(timeout=5) as client:
 			response = await client.get(CONFIG.ollama_url("/api/tags"))
@@ -117,8 +113,7 @@ def _unavailable(reason: str) -> JSONResponse:
 
 @app.get("/config")
 def config() -> dict[str, bool | str]:
-	model = CONFIG.openai_model if CONFIG.llm_provider == "openai" else CONFIG.ollama_model
-	return {"voice_enabled": CONFIG.voice_enabled, "provider": CONFIG.llm_provider, "model": model}
+	return {"voice_enabled": CONFIG.voice_enabled, "provider": CONFIG.llm_provider, "model": CONFIG.primary_model}
 
 
 @app.get("/sessions")

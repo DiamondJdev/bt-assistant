@@ -162,7 +162,7 @@ Copy [server/.env.example](server/.env.example) to `server/.env`; all options ha
 
 | Setting | Purpose | Default |
 | --- | --- | --- |
-| `BT_LLM_PROVIDER` | Primary model provider, `openai` or `ollama` | `openai` |
+| `BT_LLM_PROVIDER` | Primary model provider, `openai` or `ollama` | `openai` if `OPENAI_API_KEY` is set, otherwise `ollama` |
 | `BT_OLLAMA_URL` | Ollama server URL | `http://127.0.0.1:11434` |
 | `BT_OLLAMA_MODEL` | Local chat model | `qwen3:8b` |
 | `OPENAI_API_KEY` | Required in OpenAI mode; enables escalation in Ollama mode | none |
@@ -177,13 +177,11 @@ Copy [server/.env.example](server/.env.example) to `server/.env`; all options ha
 
 ## Model routing
 
-`BT_LLM_PROVIDER` picks the model for both text and voice. It is read at startup, so restart BT after changing it. BT refuses to start if the value is not `openai` or `ollama`, or if OpenAI mode has no `OPENAI_API_KEY`.
+`BT_LLM_PROVIDER` picks the model for both text and voice. It is read at startup, so restart BT after changing it. Case and surrounding spaces are ignored. If it is unset, BT uses OpenAI when `OPENAI_API_KEY` is set and Ollama when it is not, so an existing Ollama-only install keeps working after an upgrade. BT refuses to start if the value is not `openai` or `ollama`, or if OpenAI mode has no `OPENAI_API_KEY`.
 
-In OpenAI mode (the default) every turn goes to the configured OpenAI model. If OpenAI fails, the request fails; BT does not fall back to Ollama.
+In OpenAI mode every turn goes to the configured OpenAI model. If OpenAI fails, the request fails; BT does not fall back to Ollama.
 
 In Ollama mode BT answers locally and escalates to OpenAI when you ask it to "think harder," "use your best model," or "escalate," or when the local response is malformed or the Ollama request fails. Escalation needs `OPENAI_API_KEY`. This mode is not a privacy mode: escalated turns still go to OpenAI.
-
-Upgrading an existing install that has no OpenAI key: set `BT_LLM_PROVIDER=ollama` before you upgrade, or BT will not start.
 
 ## Project layout
 

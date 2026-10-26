@@ -139,9 +139,10 @@ async def respond(
 ) -> LLMResponse | None:
 	if provider not in {None, "local", "cloud"}:
 		raise ValueError("Unknown provider")
-	# Starting on OpenAI counts as escalated: no local heuristics or fallback.
-	escalated = provider == "cloud" or wants_escalation(user_text) or (provider != "local" and CONFIG.llm_provider == "openai")
-	if escalated:
+	# On the cloud there are no local heuristics or fallback; only an Ollama-mode escalation is logged.
+	primary_cloud = provider != "local" and CONFIG.llm_provider == "openai"
+	escalated = primary_cloud or provider == "cloud" or wants_escalation(user_text)
+	if escalated and not primary_cloud:
 		log.info("starting on the cloud model")
 
 	current = _provider("openai" if escalated else "ollama")

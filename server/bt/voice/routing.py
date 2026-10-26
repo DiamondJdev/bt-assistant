@@ -16,20 +16,22 @@ from bt.personality.system_prompt import recent_user_text, render_system_prompt,
 CHUNK_TIMEOUT = 60  # seconds to wait for each streamed chunk
 # ~4k tokens at ~4 chars/token: with the ~2.3k-token prompt it leaves room for a reply in an 8k context.
 MAX_HISTORY_CHARS = 16_000
+# ponytail: fixed ~50k-token cap for OpenAI voice, size it per model if one ever needs more.
+CLOUD_HISTORY_CHARS = 200_000
 log = logging.getLogger("bt.voice.routing")
 # Qwen3 soft switch; GGUF templates ignore reasoning_effort, and thinking ate the token budget.
 NO_THINK = "\n\n/no_think"
 
 
-def _trim(context: LLMContext) -> None:
+def _trim(context: LLMContext, limit: int) -> None:
 	# Overflowing the model context lets Ollama shift out the system prompt and tools, so budget by size.
 	# Starting on a user turn avoids orphaned replies; an oversized current turn is kept whole.
 	messages = context.get_messages()
 	sizes = [len(json.dumps(m, default=str)) for m in messages]
-	if sum(sizes) <= MAX_HISTORY_CHARS:
+	if sum(sizes) <= limit:
 		return
 	start, total = len(messages), 0
-	while start > 0 and total + sizes[start - 1] <= MAX_HISTORY_CHARS:
+	while start > 0 and total + sizes[start - 1] <= limit:
 		start -= 1
 		total += sizes[start]
 	users = [i for i, m in enumerate(messages) if m.get("role") == "user"]
@@ -97,8 +99,9 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 	async def get_chat_completions(self, context: LLMContext) -> AsyncIterator:
 		user_text = next((m.get("content", "") for m in reversed(context.get_messages()) if m.get("role") == "user"), "")
 		self._refresh_prompt(context)
-		_trim(context)
-		use_cloud = CONFIG.llm_provider == "openai" or (isinstance(user_text, str) and wants_escalation(user_text))
+		primary_cloud = CONFIG.llm_provider == "openai"
+		_trim(context, CLOUD_HISTORY_CHARS if primary_cloud else MAX_HISTORY_CHARS)
+		use_cloud = primary_cloud or (isinstance(user_text, str) and wants_escalation(user_text))
 
 		async def chunks():
 			providers = [self._cloud] if use_cloud else [self, self._cloud]

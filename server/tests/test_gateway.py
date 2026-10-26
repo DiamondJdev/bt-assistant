@@ -86,16 +86,12 @@ def test_readiness_checks_model_and_reports_dependency_failure(client, monkeypat
     assert client.get('/ready').json()['reason'] == 'Ollama is not reachable'
 
 
-def test_openai_readiness_checks_config_without_contacting_ollama(client, monkeypatch):
+def test_openai_readiness_does_not_contact_ollama(client, monkeypatch):
     def no_http(**kw):
         raise AssertionError('readiness must not contact Ollama in openai mode')
     monkeypatch.setattr(gateway.httpx, 'AsyncClient', no_http)
     monkeypatch.setattr(gateway, 'CONFIG', replace(gateway.CONFIG, llm_provider='openai', openai_api_key='sk-secret'))
     assert client.get('/ready').status_code == 200
-    monkeypatch.setattr(gateway, 'CONFIG', replace(gateway.CONFIG, openai_api_key=' '))
-    response = client.get('/ready')
-    assert response.status_code == 503
-    assert response.json()['reason'] == 'OPENAI_API_KEY is required when BT_LLM_PROVIDER=openai'
 
 
 def test_config_reports_selected_provider_and_model_without_credentials(client, monkeypatch):
@@ -110,7 +106,7 @@ def test_config_reports_selected_provider_and_model_without_credentials(client, 
     dev = routes.config()
     data = __import__('json').loads(dev.body)
     assert data['provider'] == 'openai' and data['model'] == cfg.openai_model
-    assert data['ollama_model'] == cfg.ollama_model and data['cloud_enabled'] is True
+    assert 'ollama_model' not in data and data['cloud_enabled'] is True
     assert 'sk-secret' not in body.text and b'sk-secret' not in dev.body
 
 

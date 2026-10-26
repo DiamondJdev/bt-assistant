@@ -84,7 +84,7 @@ struct BTMessageView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                Text("BT · \(BTFormat.clockWithPeriod(message.time, store.calendar))" + (message.isCloud ? " · Cloud" : ""))
+                Text("BT · \(BTFormat.clockWithPeriod(message.time, store.calendar))" + (message.provider.map { " · \($0)" } ?? ""))
                     .monoLabel()
                 if let text = message.text {
                     Text(Self.markdown(text)).textSelection(.enabled).font(.inter(17)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)

@@ -9,10 +9,19 @@ enum BTLive {
     static func messages(turns: [ChatTurn], streaming: String?, now: Date) -> [Message] {
         let saved = turns.map {
             Message(id: $0.id, role: $0.role == "user" ? .user : .bt, text: $0.text,
-                    time: Date(timeIntervalSince1970: $0.ts), isCloud: $0.compute == "openai")
+                    time: Date(timeIntervalSince1970: $0.ts), provider: providerName($0.compute))
         }
         guard let streaming else { return saved }
         return saved + [Message(id: streamingID, role: .bt, text: streaming.isEmpty ? "…" : streaming, time: now)]
+    }
+
+    /// The server's `compute` value as a label, so the badge says which model answered.
+    static func providerName(_ compute: String?) -> String? {
+        switch compute {
+        case "openai": "OpenAI"
+        case "ollama": "Ollama"
+        default: nil
+        }
     }
 
     /// The server's memory index as "BT remembers" rows, tagged by memory type.

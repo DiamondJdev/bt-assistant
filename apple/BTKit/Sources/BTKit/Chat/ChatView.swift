@@ -69,10 +69,10 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(model.turns) { turn in
-                            TurnBubble(text: turn.text, isUser: turn.role == "user", isCloud: turn.compute == "openai")
+                            TurnBubble(text: turn.text, isUser: turn.role == "user", provider: BTLive.providerName(turn.compute))
                         }
                         if let streaming = model.streamingText {
-                            TurnBubble(text: streaming.isEmpty ? "…" : streaming, isUser: false, isCloud: false)
+                            TurnBubble(text: streaming.isEmpty ? "…" : streaming, isUser: false, provider: nil)
                         }
                         ForEach(model.pendingApprovals) { approval in
                             ApprovalCard(approval: approval, model: model)
@@ -140,15 +140,15 @@ private struct ApprovalCard: View {
 private struct TurnBubble: View {
     let text: String
     let isUser: Bool
-    let isCloud: Bool
+    let provider: String?
 
     var body: some View {
         HStack {
             if isUser { Spacer(minLength: 60) }
             VStack(alignment: .leading, spacing: 4) {
                 Text(rendered).textSelection(.enabled)
-                if isCloud {
-                    Text("Cloud").font(.caption2).foregroundStyle(.secondary)
+                if let provider {
+                    Text(provider).font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .padding(10)
