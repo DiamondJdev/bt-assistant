@@ -162,6 +162,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				BT_BUILD_MODE = debug;
+				BT_BUILD_SHA = unavailable;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
@@ -202,6 +204,8 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				SDKROOT = macosx;
+				BT_BUILD_MODE = release;
+				BT_BUILD_SHA = unavailable;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 6.0;
@@ -222,6 +226,7 @@
 				DEVELOPMENT_TEAM = CUK6MYBDNQ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BTMac/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = BT;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "BT shows and controls the song playing in Music during focus sessions.";
@@ -230,6 +235,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
 				PRODUCT_NAME = BT;
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) BT_DIAGNOSTICS";
 			};
 			name = Debug;
 		};
@@ -247,6 +253,7 @@
 				DEVELOPMENT_TEAM = CUK6MYBDNQ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BTMac/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = BT;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "BT shows and controls the song playing in Music during focus sessions.";

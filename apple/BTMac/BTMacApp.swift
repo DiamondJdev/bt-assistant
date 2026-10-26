@@ -27,17 +27,41 @@ struct BTMacApp: App {
         let coding = CodingModule(modelContext: container.mainContext)
         coding.startWatching()
         let chat = ChatModel()
-        // The new screens read AppStore; these modules still serve BT's tool calls and the menu bar.
-        chat.modules = [BTModule(chat: chat), pomodoro, CalendarModule(), coding]
-        _store = State(initialValue: AppStore(nowPlaying: music, chat: chat))
+        #if BT_DIAGNOSTICS
+        chat.enableDiagnostics()
+        #endif
+        let calendar = CalendarModule()
+        // The screens and BT's tools share these modules, so a change from either shows in both.
+        chat.modules = [BTModule(chat: chat), pomodoro, calendar, coding]
+        let store = AppStore(
+            nowPlaying: music, chat: chat, calendarSource: calendar.store, pomodoro: pomodoro, codeSource: coding,
+            savedPlans: .standard
+        )
+        chat.modules.append(RoadmapModule(store: store))
+        _store = State(initialValue: store)
     }
 
     var body: some Scene {
         Window("BT", id: "main") {
             BTAppView(store: store)
+                .task {
+                    if let calendar = store.calendarSource as? CalendarStore, calendar.access == .notDetermined {
+                        await calendar.requestAccess()
+                    }
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1440, height: 900)
+        #if BT_DIAGNOSTICS
+        .commands { DiagnosticsCommands() }
+        #endif
+
+        #if BT_DIAGNOSTICS
+        Window("BT Diagnostics", id: DiagnosticsView.windowID) {
+            DiagnosticsView(serverAddress: store.chat?.serverAddress ?? "")
+        }
+        .defaultSize(width: 900, height: 700)
+        #endif
 
         MenuBarExtra {
             PomodoroMenu(pomodoro: pomodoro)
