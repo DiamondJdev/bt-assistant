@@ -294,7 +294,7 @@ Promise.resolve().then(() => fetch(new URL("/dev/config", serverUrl()))).then((r
 	if (!r.ok) throw new Error(`config ${r.status}`);
 	return r.json();
 }).then((c) => {
-	$("m-llm").textContent = c.ollama_model;
+	$("m-llm").textContent = c.model;
 	$("m-stt").textContent = c.whisper_model;
 	$("m-tts").textContent = c.piper_voice;
 	if (!c.voice_enabled) {
