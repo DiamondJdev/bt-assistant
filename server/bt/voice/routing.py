@@ -63,7 +63,11 @@ class _TurnNoted:
 
 
 class CloudLLMService(_TurnNoted, OpenAILLMService):
-	pass
+	def build_chat_completion_params(self, params_from_context) -> dict:
+		params = super().build_chat_completion_params(params_from_context)
+		if params["model"] == "gpt-5.6-luna" and params.get("tools"):
+			params["reasoning_effort"] = "none"
+		return params
 
 
 class RoutedLLMService(_TurnNoted, OLLamaLLMService):

@@ -22,6 +22,23 @@ class Stream:
         self.closed = True
 
 
+@pytest.mark.parametrize('model,has_tools,expected', [
+    ('gpt-5.6-luna', True, 'none'),
+    ('gpt-5.6-luna', False, None),
+    ('gpt-4.1', True, None),
+])
+def test_voice_luna_tool_requests_disable_reasoning(model, has_tools, expected):
+    async def run():
+        service = routing.CloudLLMService(api_key='test', settings=OpenAILLMService.Settings(model=model))
+        tools = [{'type': 'function', 'function': {'name': 'check'}}] if has_tools else []
+        params = service.build_chat_completion_params({'messages': [], 'tools': tools})
+        assert params.get('reasoning_effort') == expected
+        if expected is None:
+            assert 'reasoning_effort' not in params
+        await service.cleanup()
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('prompt,broken,want', [('hello',False,'local'),('escalate',False,'cloud'),('hello',True,'cloud')])
 def test_voice_stream_routes_and_closes_providers(prompt, broken, want, monkeypatch):
     async def run():
