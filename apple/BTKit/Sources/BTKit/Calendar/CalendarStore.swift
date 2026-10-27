@@ -70,15 +70,21 @@ public final class CalendarStore {
     /// The occurrence `item` refers to. Searches a window around the occurrence start
     /// because a moved occurrence keeps its original `occurrenceDate` but not its start.
     public func event(for item: CalendarEventItem) -> EKEvent? {
+        event(identifier: item.eventIdentifier, occurrenceStart: item.occurrenceStart)
+    }
+
+    /// The occurrence of `identifier` that starts, or started before it was moved, at `occurrenceStart`.
+    public func event(identifier: String, occurrenceStart: Date) -> EKEvent? {
         let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -7, to: item.occurrenceStart)!
-        let end = calendar.date(byAdding: .day, value: 8, to: item.occurrenceStart)!
+        let start = calendar.date(byAdding: .day, value: -7, to: occurrenceStart)!
+        let end = calendar.date(byAdding: .day, value: 8, to: occurrenceStart)!
         let match = ekEvents(from: start, to: end).first {
-            $0.calendarItemIdentifier == item.eventIdentifier && ($0.occurrenceDate ?? $0.startDate) == item.occurrenceStart
+            $0.calendarItemIdentifier == identifier && ($0.occurrenceDate ?? $0.startDate) == occurrenceStart
         }
-        // No series-master fallback: for a repeating event it is the first occurrence, not the one clicked.
-        if match == nil && !item.isRecurring {
-            return store.calendarItem(withIdentifier: item.eventIdentifier) as? EKEvent
+        // No series-master fallback: for a repeating event it is the first occurrence, not the one asked for.
+        if match == nil, let single = store.calendarItem(withIdentifier: identifier) as? EKEvent,
+           !single.hasRecurrenceRules && !single.isDetached {
+            return single
         }
         return match
     }

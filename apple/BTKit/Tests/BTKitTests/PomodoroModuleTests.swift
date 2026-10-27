@@ -118,24 +118,107 @@ struct PomodoroModuleTests {
         try FocusLog(context: container.mainContext)
             .record(FocusInterval(start: clock.now - 6000, end: clock.now - 300), label: nil)
 
-        #expect(module.snapshot == "Focus: idle, 1h 35m focused today.")
+        #expect(module.snapshot == "Focus: idle, work phase up next, 1h 35m focused today.")
         #expect(module.menuBarTitle == nil)
 
         module.start()
-        clock.now += 1500 - 720
+        clock.now += 1500 - 726
 
-        #expect(module.snapshot == "Focus: work phase, 12m left, 1h 35m focused today.")
-        #expect(module.menuBarTitle == "12:00")
+        #expect(module.snapshot == "Focus: work phase, 12:06 left, 1h 35m focused today.")
+        #expect(module.menuBarTitle == "12:06")
 
         module.pause()
 
-        #expect(module.snapshot == "Focus: work phase paused, 12m left, 1h 35m focused today.")
+        #expect(module.snapshot == "Focus: work phase paused, 12:06 left, 1h 35m focused today.")
     }
 
     @Test func declaresFocusTools() {
         #expect(makeModule().tools.map(\.name) == [
             "focus_get_status", "focus_start", "focus_pause", "focus_stop", "focus_get_stats",
         ])
+    }
+
+    @Test func controlsNeedApprovalAndReadsDoNot() {
+        let approval = Dictionary(uniqueKeysWithValues: makeModule().tools.map { ($0.name, $0.needsApproval) })
+        #expect(approval == [
+            "focus_get_status": false, "focus_start": true, "focus_pause": true, "focus_stop": true, "focus_get_stats": false,
+        ])
+    }
+
+    @Test func controlToolsActAndReturnTheSnapshot() async throws {
+        let module = makeModule()
+        let none = Data("{}".utf8)
+
+        #expect(try await module.call("focus_start", arguments: none) == "Focus: work phase, 25:00 left, 0m focused today.")
+        #expect(module.state.isRunning)
+        clock.now += 600
+        #expect(try await module.call("focus_pause", arguments: none) == "Focus: work phase paused, 15:00 left, 0m focused today.")
+        #expect(module.state.isPaused)
+        #expect(try await module.call("focus_get_status", arguments: none) == module.snapshot)
+        #expect(try await module.call("focus_stop", arguments: none) == "Focus: idle, work phase up next, 10m focused today.")
+        #expect(module.state == .idle)
+        await #expect(throws: ToolError.unknownTool("focus_nope")) {
+            _ = try await module.call("focus_nope", arguments: none)
+        }
+    }
+
+    @Test func startWithAPhaseReplacesTheWaitingBreak() async throws {
+        let module = makeModule()
+        module.skip()
+        #expect(module.snapshot == "Focus: idle, short break up next, 0m focused today.")
+
+        let started = try await module.call("focus_start", arguments: Data(#"{"phase":"work"}"#.utf8))
+
+        #expect(started == "Focus: work phase, 25:00 left, 0m focused today.")
+        #expect(module.state.completedWorkPhases == 1)
+    }
+
+    @Test func startWithAPhaseEndsTheRunningOneAndLogsItsWork() async throws {
+        let module = makeModule()
+        module.start()
+        clock.now += 600
+
+        let started = try await module.call("focus_start", arguments: Data(#"{"phase":"short_break"}"#.utf8))
+
+        #expect(started == "Focus: short break, 5:00 left, 10m focused today.")
+        #expect(try sessions().count == 1)
+    }
+
+    @Test func startWithoutAPhaseOrWithTheSameOneKeepsTheTimer() async throws {
+        let module = makeModule()
+        module.start()
+        clock.now += 600
+
+        _ = try await module.call("focus_start", arguments: Data(#"{"phase":"work"}"#.utf8))
+
+        #expect(module.remaining() == 900)
+        #expect(try sessions().isEmpty)
+    }
+
+    @Test func startRejectsAnUnknownPhase() async {
+        await #expect(throws: ToolError.self) {
+            _ = try await makeModule().call("focus_start", arguments: Data(#"{"phase":"nap"}"#.utf8))
+        }
+    }
+
+    @Test func statsListTodayTheWeekAndEachDayOldestFirst() async throws {
+        // The test clock is Friday 12 January 2001, early afternoon UTC.
+        let module = makeModule()
+        let log = FocusLog(context: container.mainContext)
+        try log.record(FocusInterval(start: clock.now - 6000, end: clock.now - 300), label: nil)
+        try log.record(FocusInterval(start: clock.now - 2 * 86400 - 1800, end: clock.now - 2 * 86400), label: nil)
+        try log.record(FocusInterval(start: clock.now - 9 * 86400 - 1800, end: clock.now - 9 * 86400), label: nil)
+
+        #expect(try await module.call("focus_get_stats", arguments: Data("{}".utf8)) == """
+            Focused 1h 35m today and 2h 5m over the past 7 days.
+            Sat 6 Jan: 0m
+            Sun 7 Jan: 0m
+            Mon 8 Jan: 0m
+            Tue 9 Jan: 0m
+            Wed 10 Jan: 30m
+            Thu 11 Jan: 0m
+            Fri 12 Jan: 1h 35m
+            """)
     }
 
     @Test func nowPlayingStatusMessages() {

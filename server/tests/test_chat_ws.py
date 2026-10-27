@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 
 import pytest
@@ -45,6 +46,49 @@ def test_new_socket_announces_a_session_and_streams_a_turn(client, monkeypatch):
         done = ws.receive_json()
     assert done == {'type': 'done', 'text': 'Hello', 'compute': 'ollama', 'tools_used': []}
     assert _roles(client, sid) == ['user', 'bt']
+
+
+def test_opt_in_diagnostics_correlate_done_and_live_metrics(client, monkeypatch):
+    turn_id = '7533469b-893b-4c9b-9666-e25698b2714b'
+    async def fake(messages, text, **kw):
+        await kw['telemetry'].publish()
+        return LLMResponse('Hello', 'ollama')
+    _install(monkeypatch, fake)
+    with client.websocket_connect('/chat/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'message', 'text': 'Hi', 'diagnostics': True, 'turn_id': turn_id.upper()})
+        live = ws.receive_json()
+        assert live['type'] == 'metrics'
+        done = ws.receive_json()
+    assert live['type'] == 'metrics' and live['turn_id'] == turn_id
+    assert done['turn_id'] == turn_id
+    assert done['metrics']['history_turns'] == 1
+    assert done['metrics']['context_chars'] == 0
+    assert done['metrics']['calls'] == []
+
+
+def test_diagnostics_generate_id_and_correlate_private_errors(client, monkeypatch, caplog):
+    async def fake(*args, **kwargs):
+        raise RuntimeError('secret prompt and credential')
+    _install(monkeypatch, fake)
+    with client.websocket_connect('/chat/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'message', 'text': 'Hi', 'diagnostics': True})
+        error = ws.receive_json()
+    from uuid import UUID
+    assert UUID(error['turn_id'])
+    assert error['metrics']['status'] == 'error'
+    assert error['turn_id'] in caplog.text
+    assert 'secret prompt and credential' not in caplog.text
+
+
+@pytest.mark.parametrize('turn_id', ['x' * 100, 'not-a-uuid', 123])
+def test_invalid_turn_ids_are_rejected(client, monkeypatch, turn_id):
+    _install(monkeypatch, _hello)
+    with client.websocket_connect('/chat/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'message', 'text': 'Hi', 'turn_id': turn_id})
+        assert ws.receive_json()['type'] == 'error'
 
 
 def test_existing_session_is_continued(client, monkeypatch):
@@ -241,11 +285,120 @@ def test_unanswered_client_tool_times_out(client, monkeypatch):
     with client.websocket_connect('/chat/ws') as ws:
         _start(ws)
         assert ws.receive_json()['type'] == 'tool_call'
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
         done = ws.receive_json()
+        ws.send_json({'type': 'tool_approval', 'id': 'c1'})
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
         ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'too late'})
         ws.send_json({'type': 'message', 'text': 'still there?'})
         assert ws.receive_json()['type'] == 'tool_call'
     assert done['text'] == 'The app did not answer calendar_list_events in time.'
+
+
+def test_live_client_tool_approval_is_acknowledged(client, monkeypatch):
+    _tool_turn(monkeypatch)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        assert ws.receive_json()['type'] == 'tool_call'
+        ws.send_json({'type': 'tool_approval', 'id': 'other'})
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'other'}
+        ws.send_json({'type': 'tool_approval', 'id': 'c1'})
+        assert ws.receive_json() == {'type': 'tool_approved', 'id': 'c1'}
+        ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Approved'})
+        assert ws.receive_json()['text'] == 'Approved'
+
+
+def test_approved_tool_survives_original_deadline_during_acknowledgement(monkeypatch):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_TIMEOUT_SECS', 0.01)
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_EXECUTION_TIMEOUT_SECS', 1.0, raising=False)
+
+    async def scenario():
+        frames = asyncio.Queue()
+
+        class Socket:
+            async def send_json(self, frame):
+                await frames.put(frame)
+                if frame['type'] == 'tool_approved':
+                    await asyncio.sleep(0.05)
+
+        connection = chat_ws._Connection(Socket(), 'test')
+        task = asyncio.create_task(connection.call_client('c1', 'calendar_add_event', '{}'))
+        try:
+            assert (await frames.get())['type'] == 'tool_call'
+            await connection.on_frame(json.dumps({'type': 'tool_approval', 'id': 'c1'}))
+            assert await frames.get() == {'type': 'tool_approved', 'id': 'c1'}
+            await connection.on_frame(json.dumps({
+                'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Saved',
+            }))
+            assert await task == 'Saved'
+            assert frames.empty()
+            assert not connection.pending
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('complete', [True, False])
+def test_duplicate_approval_preserves_execution_deadline(monkeypatch, complete):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_EXECUTION_TIMEOUT_SECS', 0.05)
+
+    async def scenario():
+        frames = []
+
+        class Socket:
+            async def send_json(self, frame):
+                frames.append(frame)
+
+        connection = chat_ws._Connection(Socket(), 'test')
+        task = asyncio.create_task(connection.call_client('c1', 'calendar_add_event', '{}'))
+        try:
+            await asyncio.sleep(0)
+            approval = json.dumps({'type': 'tool_approval', 'id': 'c1'})
+            await connection.on_frame(approval)
+            pending = connection.pending['c1']
+            deadline = pending.deadline.when()
+            await connection.on_frame(approval)
+            assert connection.pending['c1'] is pending
+            assert pending.deadline.when() == deadline
+            assert frames[-2:] == [{'type': 'tool_approved', 'id': 'c1'}] * 2
+            if complete:
+                await connection.on_frame(json.dumps({
+                    'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Saved',
+                }))
+                assert await task == 'Saved'
+            else:
+                assert await task == 'The app did not answer calendar_add_event in time.'
+                assert frames[-1] == {'type': 'tool_cancelled', 'id': 'c1'}
+                await connection.on_frame(approval)
+                assert frames[-1] == {'type': 'tool_cancelled', 'id': 'c1'}
+            assert not connection.pending
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_late_approval_is_rejected_while_followup_is_streaming(client, monkeypatch):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_TIMEOUT_SECS', 0.05)
+    resume = threading.Event()
+    async def fake(messages, text, **kw):
+        content = await kw['call_client']('c1', 'calendar_list_events', '{}')
+        await kw['on_delta']('Continuing after timeout')
+        await asyncio.to_thread(resume.wait, 2)
+        return LLMResponse(content, 'ollama')
+    _install(monkeypatch, fake)
+    with client.websocket_connect('/chat/ws') as ws:
+        _start(ws)
+        assert ws.receive_json()['type'] == 'tool_call'
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
+        assert ws.receive_json()['type'] == 'delta'
+        ws.send_json({'type': 'tool_approval', 'id': 'c1'})
+        assert ws.receive_json() == {'type': 'tool_cancelled', 'id': 'c1'}
+        resume.set()
+        assert ws.receive_json()['type'] == 'done'
 
 
 def test_unknown_tool_result_is_ignored(client, monkeypatch):

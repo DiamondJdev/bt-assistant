@@ -24,7 +24,7 @@ final class FocusSession {
 
 /// Every SwiftData model in BTKit, for building the app's one `ModelContainer`.
 public enum BTModels {
-    public static let all: [any PersistentModel.Type] = [FocusSession.self]
+    public static let all: [any PersistentModel.Type] = [FocusSession.self, CodingHeartbeat.self]
 }
 
 @MainActor
@@ -39,6 +39,15 @@ struct FocusLog {
         let seconds = interval.end.timeIntervalSince(interval.start)
         context.insert(FocusSession(start: interval.start, end: interval.end, focusedSeconds: seconds, label: label))
         try context.save()
+    }
+
+    func sessions(in interval: DateInterval) -> [FocusSession] {
+        let (from, to) = (interval.start, interval.end)
+        let descriptor = FetchDescriptor<FocusSession>(
+            predicate: #Predicate { $0.end >= from && $0.end < to },
+            sortBy: [SortDescriptor(\.start)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     /// Sessions count toward the day they ended on.

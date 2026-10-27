@@ -1,6 +1,6 @@
 # BT
 
-BT is a local-first, voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It runs a conversational core locally through Ollama, keeps transcripts in SQLite, and can escalate a turn to OpenAI when asked or when the local response fails.
+BT is a voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It answers through OpenAI by default and keeps transcripts in SQLite. Set `BT_LLM_PROVIDER=ollama` to run the model locally through Ollama instead; in that mode BT escalates a turn to OpenAI when asked or when the local response fails.
 
 This repository is a monorepo. `server/` holds the FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. `apple/` holds the native macOS app shell and shared Swift package. Editor plugins (`editors/`) are planned; see [the monorepo plan](docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md). See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
 
@@ -12,13 +12,14 @@ flowchart LR
     BT[BT Server]
     STT["Speech-to-text"]
     RequestTranscript[("Transcript<br/>Request + history")]
-    Ollama["Ollama Local model"]
-    OpenAI["OpenAI fallback"]
+    OpenAI["OpenAI (default)"]
+    Ollama["Ollama local model (BT_LLM_PROVIDER=ollama)"]
     ResponseTranscript[("Transcript<br/>Stored response")]
     TTS[Text-to-speech]
 
     Client --> BT --> STT --> RequestTranscript
-    RequestTranscript --> Ollama
+    RequestTranscript --> OpenAI
+    RequestTranscript -.-> Ollama
     Ollama -.->|escalate when needed| OpenAI
     Ollama --> ResponseTranscript
     OpenAI --> ResponseTranscript
@@ -29,8 +30,8 @@ flowchart LR
 
 The text conversational core is ready for development use. The voice pipeline is available behind an opt-in setting.
 
-- [x] Local chat through Ollama
-- [x] Local-first routing with an optional OpenAI fallback
+- [x] Chat through OpenAI by default, or locally through Ollama
+- [x] Ollama mode with an optional OpenAI fallback
 - [x] SQLite-backed session transcripts
 - [x] Optional speech-to-text and text-to-speech pipeline
 - [x] Developer dashboard for live transcripts
@@ -39,16 +40,15 @@ The text conversational core is ready for development use. The voice pipeline is
 - [x] NixOS service module and daily transcript backups
 - [x] Native macOS app shell and tool sidebar (`apple/`)
 - [ ] Native chat, productivity tools and voice
+- [ ] Native iOS app with equal capabilities to macOS client.
 - [ ] External integrations
-
-OpenAI fallback has not yet been fully tested end-to-end.
 
 ## Requirements
 
 - Python 3.11 to 3.14 (`ctranslate2` has no 3.15 wheels yet; use `uv sync --python 3.14` if uv picks a newer one)
 - [uv](https://docs.astral.sh/uv/)
-- [Ollama](https://ollama.com/) running locally
-- An Ollama chat model that matches `BT_OLLAMA_MODEL`
+- An OpenAI API key in `OPENAI_API_KEY`, for the default OpenAI mode
+- For Ollama mode only: [Ollama](https://ollama.com/) running locally and a chat model that matches `BT_OLLAMA_MODEL`
 
 Voice mode also needs FFmpeg, PortAudio, and Piper. The Nix development shell provides these dependencies.
 
@@ -65,21 +65,24 @@ nix develop ./nix
 uv sync
 ```
 
-Ensure the Ollama service is running, then pull a model. For example:
+For Ollama mode, ensure the Ollama service is running, then pull a model. Skip this if you use OpenAI. For example:
 
 ```sh
 ollama pull qwen2.5:14b
 ```
 
-Create your local configuration and set the model to the one you pulled:
+Create your local configuration:
 
 ```sh
 cp .env.example .env
 ```
 
-In `.env`, add:
+In `.env`, set your OpenAI key, or switch to Ollama and name the model you pulled:
 
 ```dotenv
+OPENAI_API_KEY=sk-...
+# or
+BT_LLM_PROVIDER=ollama
 BT_OLLAMA_MODEL=qwen2.5:14b
 ```
 
@@ -97,14 +100,14 @@ Install the system dependencies required by the features you intend to use, then
 uv sync
 ```
 
-Install and start Ollama, pull a model, and configure BT as above:
+Copy the configuration and fill it in as above. For Ollama mode, also install and start Ollama and pull a model:
 
 ```sh
-ollama pull qwen2.5:14b
 cp .env.example .env
+ollama pull qwen2.5:14b
 ```
 
-Set `BT_OLLAMA_MODEL=qwen2.5:14b` in `.env`, then run:
+Then run:
 
 ```sh
 uv run bt
@@ -144,7 +147,7 @@ The client supports typed chat, saved conversations, foreground push-to-talk and
 
 For the NixOS service, private Tailscale HTTPS, backup/restore steps and deployment checks, follow [the deployment guide](docs/DEPLOYMENT.md). The service remains bound to loopback behind Tailscale Serve. Developer mode is not needed by the browser client.
 
-`GET /health` reports process availability. Authenticated `GET /ready` checks storage, Ollama reachability and the installed model. Run one server process; conversation leases are process-local.
+`GET /health` reports process availability. Authenticated `GET /ready` checks storage. In Ollama mode it also checks that Ollama is reachable and the model is installed. In OpenAI mode it checks only that the provider is configured; it does not call OpenAI, so a bad key or missing model access shows up on the first reply. Run one server process; conversation leases are process-local.
 
 ## Native macOS client
 
@@ -158,10 +161,11 @@ Copy [server/.env.example](server/.env.example) to `server/.env`; all options ha
 
 | Setting | Purpose | Default |
 | --- | --- | --- |
+| `BT_LLM_PROVIDER` | Primary model provider, `openai` or `ollama` | `openai` if `OPENAI_API_KEY` is set, otherwise `ollama` |
 | `BT_OLLAMA_URL` | Ollama server URL | `http://127.0.0.1:11434` |
 | `BT_OLLAMA_MODEL` | Local chat model | `qwen3:8b` |
-| `OPENAI_API_KEY` | Enables cloud escalation | none |
-| `BT_OPENAI_MODEL` | Cloud fallback model | `gpt-5.6-luna` |
+| `OPENAI_API_KEY` | Required in OpenAI mode; enables escalation in Ollama mode | none |
+| `BT_OPENAI_MODEL` | OpenAI model | `gpt-5.6-luna` |
 | `BT_HOST` | Server bind address (see [Remote access](#remote-access-over-tailscale)) | `127.0.0.1` |
 | `BT_DB_PATH` | SQLite transcript database path | `bt.sqlite3` |
 | `BT_VOICE` | Enable voice mode when set to `1` | off |
@@ -172,7 +176,11 @@ Copy [server/.env.example](server/.env.example) to `server/.env`; all options ha
 
 ## Model routing
 
-BT normally uses Ollama. It escalates to the configured OpenAI model when you explicitly ask it to “think harder,” “use your best model,” or “escalate,” and also when the local response is malformed or the Ollama request fails. Configure `OPENAI_API_KEY` before relying on this fallback.
+`BT_LLM_PROVIDER` picks the model for both text and voice. It is read at startup, so restart BT after changing it. Case and surrounding spaces are ignored. If it is unset, BT uses OpenAI when `OPENAI_API_KEY` is set and Ollama when it is not, so an existing Ollama-only install keeps working after an upgrade. BT refuses to start if the value is not `openai` or `ollama`, or if OpenAI mode has no `OPENAI_API_KEY`.
+
+In OpenAI mode every turn goes to the configured OpenAI model. If OpenAI fails, the request fails; BT does not fall back to Ollama.
+
+In Ollama mode BT answers locally and escalates to OpenAI when you ask it to "think harder," "use your best model," or "escalate," or when the local response is malformed or the Ollama request fails. Escalation needs `OPENAI_API_KEY`. This mode is not a privacy mode: escalated turns still go to OpenAI.
 
 ## Project layout
 

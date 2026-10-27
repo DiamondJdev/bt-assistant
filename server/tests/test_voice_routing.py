@@ -133,7 +133,7 @@ def test_voice_history_trim_keeps_oversized_current_turn():
         {'role': 'user', 'content': 'old'}, {'role': 'assistant', 'content': 'old'},
         {'role': 'user', 'content': 'now'}, {'role': 'tool', 'content': big},
     ])
-    routing._trim(context)
+    routing._trim(context, routing.MAX_HISTORY_CHARS)
     assert [m['content'] for m in context.get_messages()] == ['now', big]
 
 
@@ -152,3 +152,85 @@ def test_voice_tool_call_only_reply_is_not_empty(monkeypatch):
         assert [chunk async for chunk in stream] == [call]
         await service.cleanup()
     asyncio.run(run())
+
+
+def _openai_mode(monkeypatch, cloud):
+    local_calls = []
+    async def local_stream(self, context):
+        local_calls.append(context)
+        return Stream(['local'])
+    async def cloud_stream(self, context):
+        return cloud
+    monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
+    monkeypatch.setattr(OpenAILLMService, 'get_chat_completions', cloud_stream)
+    monkeypatch.setattr(routing, 'CONFIG', replace(routing.CONFIG, llm_provider='openai', openai_api_key='test'))
+    return local_calls
+
+
+def test_voice_openai_mode_starts_on_cloud_without_ollama(monkeypatch):
+    async def run():
+        cloud = Stream(['cloud'])
+        local_calls = _openai_mode(monkeypatch, cloud)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        assert [chunk.choices[0].delta.content async for chunk in stream] == ['cloud']
+        assert local_calls == []
+        assert service.compute == 'openai'
+        assert cloud.closed
+        await service.cleanup()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('texts', [[], ['partial']])
+def test_voice_openai_mode_propagates_cloud_errors_without_retry(texts, monkeypatch):
+    async def run():
+        cloud = Stream(texts, RuntimeError('cloud down'))
+        local_calls = _openai_mode(monkeypatch, cloud)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        seen = []
+        with pytest.raises(RuntimeError, match='cloud down'):
+            async for chunk in stream:
+                seen.append(chunk.choices[0].delta.content)
+        assert seen == texts
+        assert local_calls == []
+        assert service.compute == 'openai'
+        assert cloud.closed
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_openai_mode_tool_call_only_reply_is_not_empty(monkeypatch):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]), finish_reason='tool_calls')])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+        _openai_mode(monkeypatch, ToolStream([]))
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        assert [chunk async for chunk in stream] == [call]
+        assert service.compute == 'openai'
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_openai_mode_without_key_says_so(monkeypatch):
+    async def run():
+        monkeypatch.setattr(routing, 'CONFIG', replace(routing.CONFIG, llm_provider='openai', openai_api_key=''))
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        with pytest.raises(RuntimeError, match='OpenAI requires OPENAI_API_KEY'):
+            await anext(stream)
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_history_budget_follows_the_provider(monkeypatch):
+    messages = [{'role': 'user' if i % 2 == 0 else 'assistant', 'content': 'x' * 1000} for i in range(40)]
+    small = LLMContext(messages=list(messages))
+    routing._trim(small, routing.MAX_HISTORY_CHARS)
+    assert len(small.get_messages()) < 40
+    large = LLMContext(messages=list(messages))
+    routing._trim(large, routing.CLOUD_HISTORY_CHARS)
+    assert len(large.get_messages()) == 40

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import re
+import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -19,6 +21,7 @@ from openai import AsyncOpenAI
 
 from bt.config import CONFIG
 from bt.llm.streaming import completion_kwargs, stream_complete
+from bt.llm.telemetry import CallMetrics, TurnMetrics
 from bt.personality.system_prompt import recent_user_text, render_system_prompt, turn_note, with_turn_note
 from bt.tools.registry import ToolContext, dispatch_call, openai_tools
 
@@ -70,7 +73,7 @@ def _provider(key: str) -> Provider:
 			_PROVIDERS[key] = Provider(key, CONFIG.ollama_model, client)
 		else:
 			if not CONFIG.openai_api_key:
-				raise RuntimeError("Escalation requested but OPENAI_API_KEY is not set")
+				raise RuntimeError("OPENAI_API_KEY is not set")
 			client = AsyncOpenAI(api_key=CONFIG.openai_api_key, timeout=LLM_TIMEOUT_SECS, max_retries=1)
 			_PROVIDERS[key] = Provider(key, CONFIG.openai_model, client)
 	return _PROVIDERS[key]
@@ -82,10 +85,19 @@ async def _complete(
 	messages: list[Any],
 	tools: list[dict[str, Any]] | None = None,
 	tool_choice: str | None = None,
+	metrics: CallMetrics | None = None,
 ):
 	resp = await provider.client.chat.completions.create(**completion_kwargs(provider, messages, tools, tool_choice))
+	if metrics:
+		metrics.usage(getattr(resp, "usage", None))
 	if not resp.choices:
 		raise ValueError(f"{provider.key} returned no choices")
+	if metrics:
+		message = resp.choices[0].message
+		if message.content or message.tool_calls:
+			metrics.output()
+		if strip_thinking(message.content):
+			metrics.visible()
 	return resp.choices[0].message
 
 
@@ -123,11 +135,14 @@ async def respond(
 	on_delta: Callable[[str], Awaitable[None]] | None = None,
 	client_tools: list[dict[str, Any]] | None = None,
 	call_client: Callable[[str, str, str], Awaitable[str]] | None = None,
+	telemetry: TurnMetrics | None = None,
 ) -> LLMResponse | None:
 	if provider not in {None, "local", "cloud"}:
 		raise ValueError("Unknown provider")
-	escalated = provider == "cloud" or wants_escalation(user_text)
-	if escalated:
+	# On the cloud there are no local heuristics or fallback; only an Ollama-mode escalation is logged.
+	primary_cloud = provider != "local" and CONFIG.llm_provider == "openai"
+	escalated = primary_cloud or provider == "cloud" or wants_escalation(user_text)
+	if escalated and not primary_cloud:
 		log.info("starting on the cloud model")
 
 	current = _provider("openai" if escalated else "ollama")
@@ -143,12 +158,26 @@ async def respond(
 		client_names = {t["function"]["name"] for t in client_tools or ()}
 
 	async def complete(tool_choice: str | None = None):
-		if on_delta is None:
-			extra = {"tool_choice": tool_choice} if tool_choice else {}
-			return await _complete(current, working, tools, **extra)
-		# A mid-turn escalation stops deltas; the cloud reply arrives whole with the result.
-		return await stream_complete(current, working, tools, tool_choice, on_text=stream_to)
+		nonlocal active_call
+		active_call = telemetry.start_call(current) if telemetry else None
+		extra = {"metrics": active_call} if active_call else {}
+		try:
+			if on_delta is None:
+				if tool_choice:
+					extra['tool_choice'] = tool_choice
+				message = await _complete(current, working, tools, **extra)
+			else:
+				message = await stream_complete(current, working, tools, tool_choice, on_text=stream_to, **extra)
+		except BaseException as exc:
+			if active_call:
+				active_call.finish('cancelled' if isinstance(exc, asyncio.CancelledError) else 'error')
+			raise
+		if active_call:
+			active_call.finish('completed')
+			await telemetry.publish()
+		return message
 
+	active_call = None
 	stream_to = on_delta
 	try:
 		for _ in range(MAX_TOOL_ITERATIONS):
@@ -158,7 +187,7 @@ async def respond(
 				# Covers connection, timeout, status errors and malformed replies; tool turns so far are kept.
 				if escalated:
 					raise
-				log.warning("local call failed (%s), escalating to cloud", exc)
+				log.warning("local call failed (%s), escalating to cloud", type(exc).__name__ if telemetry else exc)
 				current, escalated, stream_to = _provider("openai"), True, None
 				continue
 
@@ -172,18 +201,28 @@ async def respond(
 			working.append(_assistant_turn(message))
 			for call in message.tool_calls:
 				name, arguments = call.function.name, call.function.arguments
-				if name in client_names:
-					content = await call_client(call.id, name, arguments)
-					ctx.used.append(name)
-				else:
-					content = await dispatch_call(name, arguments, ctx)
+				started = time.monotonic() if telemetry else None
+				try:
+					if name in client_names:
+						content = await call_client(call.id, name, arguments)
+						ctx.used.append(name)
+					else:
+						content = await dispatch_call(name, arguments, ctx)
+				finally:
+					if telemetry and active_call:
+						telemetry.tool_elapsed(active_call, (time.monotonic() - started) * 1000, client=name in client_names)
+				if telemetry:
+					await telemetry.publish()
 				working.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
 		log.warning("tool budget spent after %d rounds, answering without tools", MAX_TOOL_ITERATIONS)
 		# Tools stay declared so the tool turns above remain valid; "none" forces prose.
 		return _result(await complete(tool_choice="none"), current, ctx)
 	except Exception as exc:
-		log.exception("Unexpected error during LLM response: %s", exc)
+		if telemetry:
+			log.error("LLM response failed turn_id=%s error_type=%s", telemetry.turn_id, type(exc).__name__)
+		else:
+			log.exception("Unexpected error during LLM response: %s", exc)
 		raise
 
 def _assistant_turn(message) -> dict[str, Any]:

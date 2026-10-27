@@ -12,9 +12,20 @@ public final class PomodoroModule: ToolModule {
     public let symbol = "timer"
     public let tools: [ToolDefinition] = [
         ToolDefinition(name: "focus_get_status", description: "Current Pomodoro phase, time remaining, and minutes focused today."),
-        ToolDefinition(name: "focus_start", description: "Start or resume the Pomodoro timer."),
-        ToolDefinition(name: "focus_pause", description: "Pause the running Pomodoro phase."),
-        ToolDefinition(name: "focus_stop", description: "Stop the Pomodoro timer and log any work time of at least one minute."),
+        ToolDefinition(
+            name: "focus_start",
+            description: "Start or resume the Pomodoro timer. Without phase it starts the phase that is up next. "
+                + "With a different phase it ends the current one and starts that phase.",
+            parameters: [
+                "type": "object",
+                "properties": ["phase": ["type": "string", "enum": ["work", "short_break", "long_break"]]],
+                "additionalProperties": false,
+            ],
+            needsApproval: true
+        ),
+        ToolDefinition(name: "focus_pause", description: "Pause the running Pomodoro phase.", needsApproval: true),
+        ToolDefinition(name: "focus_stop", description: "Stop the Pomodoro timer and log any work time of at least one minute.",
+                       needsApproval: true),
         ToolDefinition(name: "focus_get_stats", description: "Minutes focused today and over the past 7 days."),
     ]
 
@@ -28,6 +39,10 @@ public final class PomodoroModule: ToolModule {
     }
 
     public let nowPlaying: (any NowPlayingSource)?
+    /// Names the work phases logged from now on, e.g. the calendar block Focus started from.
+    public var label: String?
+    /// Bumps each time a work phase is logged.
+    public private(set) var logToken = 0
 
     @ObservationIgnored private let log: FocusLog
     @ObservationIgnored private let defaults: UserDefaults
@@ -68,6 +83,37 @@ public final class PomodoroModule: ToolModule {
         scheduleNotification()
     }
 
+    /// Starts `phase`, ending a different active or waiting phase first.
+    public func start(_ phase: PomodoroPhase) {
+        if phase != state.phase {
+            finish(state.switched(to: phase, at: now()))
+            enqueue { await $0.cancelAll() }
+        }
+        start()
+    }
+
+    /// Starts a work phase of `length`, ending any other active or waiting phase first.
+    public func startWork(length: TimeInterval, label: String? = nil) {
+        if state.phase != .work || state.isRunning || state.isPaused {
+            finish(state.switched(to: .work, at: now()))
+            enqueue { await $0.cancelAll() }
+        }
+        var custom = durations
+        custom.work = length
+        if let label { self.label = label }
+        state = state.started(at: now(), durations: custom)
+        scheduleNotification()
+    }
+
+    /// "+5 min": lengthens the running or paused phase.
+    public func extend(by seconds: TimeInterval) {
+        guard state.isRunning || state.isPaused else { return }
+        state = state.extended(by: seconds)
+        guard state.isRunning else { return }
+        enqueue { await $0.cancelAll() }
+        scheduleNotification()
+    }
+
     public func pause() {
         guard state.isRunning else { return }
         state = state.paused(at: now())
@@ -102,6 +148,12 @@ public final class PomodoroModule: ToolModule {
         log.totalFocused(on: now())
     }
 
+    /// Logged work phases that ended inside `interval`.
+    func loggedSessions(in interval: DateInterval) -> [(FocusInterval, label: String?)] {
+        _ = logToken
+        return log.sessions(in: interval).map { (FocusInterval(start: $0.start, end: $0.end), $0.label) }
+    }
+
     public func remaining() -> TimeInterval? {
         state.remaining(at: now())
     }
@@ -113,16 +165,61 @@ public final class PomodoroModule: ToolModule {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
+    /// Remaining time matches the menu bar to the second, so BT quotes what the owner sees.
     public var snapshot: String? {
         let today = "\(Self.format(todayFocused)) focused today."
-        guard let remaining = remaining() else { return "Focus: idle, \(today)" }
+        let phase = Self.describe(state.phase)
+        guard let left = menuBarTitle else { return "Focus: idle, \(phase) up next, \(today)" }
         let paused = state.isPaused ? " paused" : ""
-        let left = Self.format(remaining, roundingUp: true)
-        return "Focus: \(Self.describe(state.phase))\(paused), \(left) left, \(today)"
+        return "Focus: \(phase)\(paused), \(left) left, \(today)"
     }
 
     public var content: AnyView {
         AnyView(PomodoroView(module: self))
+    }
+
+    // MARK: Tools
+
+    /// Controls return the snapshot after the change so the model can confirm it in one call.
+    public func call(_ name: String, arguments: Data) async throws -> String {
+        switch name {
+        case "focus_start":
+            if let phase = try Self.phaseArgument(arguments) { start(phase) } else { start() }
+        case "focus_pause": pause()
+        case "focus_stop": stop()
+        case "focus_get_status": break
+        case "focus_get_stats": return stats()
+        default: throw ToolError.unknownTool(name)
+        }
+        return snapshot ?? ""
+    }
+
+    /// Today's and the past seven days' totals, then one `Mon 19 Oct: 1h 35m` line per day, oldest first.
+    private func stats() -> String {
+        let calendar = Calendar.current
+        let today = now()
+        let week = log.totalFocused(lastDays: 7, endingOn: today, calendar: calendar)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE d MMM"
+        let days = (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+        let lines = days.map { "\(formatter.string(from: $0)): \(Self.format(log.totalFocused(on: $0, calendar: calendar)))" }
+        let summary = "Focused \(Self.format(todayFocused)) today and \(Self.format(week)) over the past 7 days."
+        return ([summary] + lines).joined(separator: "\n")
+    }
+
+    private static func phaseArgument(_ arguments: Data) throws -> PomodoroPhase? {
+        struct Arguments: Decodable { let phase: String? }
+        guard let arguments = try? JSONDecoder().decode(Arguments.self, from: arguments) else {
+            throw ToolError.badArguments("expected an object with an optional phase")
+        }
+        switch arguments.phase {
+        case nil: return nil
+        case "work": return .work
+        case "short_break": return .shortBreak
+        case "long_break": return .longBreak
+        case let other?: throw ToolError.badArguments("phase must be work, short_break or long_break, not \(other)")
+        }
     }
 
     /// Waits for queued notification work; used by tests.
@@ -139,8 +236,8 @@ public final class PomodoroModule: ToolModule {
     }
 
     /// `1h 35m`, or `35m` under an hour.
-    static func format(_ interval: TimeInterval, roundingUp: Bool = false) -> String {
-        let minutes = Int((interval / 60).rounded(roundingUp ? .up : .down))
+    static func format(_ interval: TimeInterval) -> String {
+        let minutes = Int(interval / 60)
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
@@ -149,7 +246,8 @@ public final class PomodoroModule: ToolModule {
     private func finish(_ result: (PomodoroState, FocusInterval?)) {
         if let interval = result.1 {
             do {
-                try log.record(interval, label: nil)
+                try log.record(interval, label: label)
+                logToken += 1
             } catch {
                 Self.logger.error("Could not log focus session: \(error.localizedDescription)")
             }

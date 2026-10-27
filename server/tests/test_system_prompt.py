@@ -58,3 +58,11 @@ def test_recent_user_text_covers_short_follow_ups():
         {'role': 'user', 'content': 'Yes.'},
     ]
     assert system_prompt.recent_user_text(messages) == 'read my to-do list Yes.'
+
+
+def test_prompt_names_the_configured_primary_model(monkeypatch):
+    cfg = replace(system_prompt.CONFIG, tools_enabled=False, llm_provider='openai', openai_model='gpt-x')
+    monkeypatch.setattr(system_prompt, 'CONFIG', cfg)
+    assert 'Your primary model is gpt-x via OpenAI' in system_prompt.render_system_prompt()
+    monkeypatch.setattr(system_prompt, 'CONFIG', replace(cfg, llm_provider='ollama', ollama_model='qwen3:8b'))
+    assert 'Your primary model is qwen3:8b via Ollama' in system_prompt.render_system_prompt()

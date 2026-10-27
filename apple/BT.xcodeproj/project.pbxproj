@@ -1,130 +1,232 @@
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
-	classes = {};
+	classes = {
+	};
 	objectVersion = 60;
 	objects = {
-		B10000000000000000000001 = {
-			isa = PBXBuildFile;
-			fileRef = B10000000000000000000003;
-		};
-		B10000000000000000000002 = {
-			isa = PBXBuildFile;
-			productRef = B10000000000000000000015;
-		};
-		B10000000000000000000003 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.swift;
-			path = BTMacApp.swift;
-			sourceTree = "<group>";
-		};
-		B10000000000000000000004 = {
-			isa = PBXFileReference;
-			explicitFileType = wrapper.application;
-			includeInIndex = 0;
-			path = BT.app;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		B10000000000000000000005 = {
+
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* BTMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* BTMacApp.swift */; };
+		B10000000000000000000002 /* BTKit in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000015 /* BTKit */; };
+		B10000000000000000000019 /* MusicController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* MusicController.swift */; };
+		B1000000000000000000001A /* PomodoroMenuBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* PomodoroMenuBar.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000003 /* BTMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BTMacApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* BT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BT.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000016 /* BTMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BTMac.entitlements; sourceTree = "<group>"; };
+		B10000000000000000000017 /* MusicController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicController.swift; sourceTree = "<group>"; };
+		B10000000000000000000018 /* PomodoroMenuBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroMenuBar.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B10000000000000000000005 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = (B10000000000000000000002);
+			files = (
+				B10000000000000000000002 /* BTKit in Frameworks */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
 		B10000000000000000000006 = {
 			isa = PBXGroup;
-			children = (B10000000000000000000007, B10000000000000000000008);
+			children = (
+				B10000000000000000000007 /* BTMac */,
+				B10000000000000000000008 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
-		B10000000000000000000007 = {
+		B10000000000000000000007 /* BTMac */ = {
 			isa = PBXGroup;
-			children = (B10000000000000000000003, B10000000000000000000017, B10000000000000000000018, B10000000000000000000016);
+			children = (
+				B10000000000000000000003 /* BTMacApp.swift */,
+				B10000000000000000000017 /* MusicController.swift */,
+				B10000000000000000000018 /* PomodoroMenuBar.swift */,
+				B10000000000000000000016 /* BTMac.entitlements */,
+			);
 			path = BTMac;
 			sourceTree = "<group>";
 		};
-		B10000000000000000000008 = {
+		B10000000000000000000008 /* Products */ = {
 			isa = PBXGroup;
-			children = (B10000000000000000000004);
+			children = (
+				B10000000000000000000004 /* BT.app */,
+			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		B10000000000000000000009 = {
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B10000000000000000000009 /* BTMac */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B10000000000000000000010;
-			buildPhases = (B1000000000000000000000B, B10000000000000000000005);
-			buildRules = ();
-			dependencies = ();
+			buildConfigurationList = B10000000000000000000010 /* Build configuration list for PBXNativeTarget "BTMac" */;
+			buildPhases = (
+				B1000000000000000000000B /* Sources */,
+				B10000000000000000000005 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = BTMac;
-			packageProductDependencies = (B10000000000000000000015);
+			packageProductDependencies = (
+				B10000000000000000000015 /* BTKit */,
+			);
 			productName = BT;
-			productReference = B10000000000000000000004;
+			productReference = B10000000000000000000004 /* BT.app */;
 			productType = "com.apple.product-type.application";
 		};
-		B1000000000000000000000A = {
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B1000000000000000000000A /* Project object */ = {
 			isa = PBXProject;
-			attributes = { LastUpgradeCheck = 1600; };
-			buildConfigurationList = B1000000000000000000000F;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = B1000000000000000000000F /* Build configuration list for PBXProject "BT" */;
 			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (en, Base);
+			knownRegions = (
+				en,
+				Base,
+			);
 			mainGroup = B10000000000000000000006;
-			packageReferences = (B10000000000000000000014);
-			productRefGroup = B10000000000000000000008;
+			packageReferences = (
+				B10000000000000000000014 /* XCLocalSwiftPackageReference "BTKit" */,
+			);
+			productRefGroup = B10000000000000000000008 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (B10000000000000000000009);
+			targets = (
+				B10000000000000000000009 /* BTMac */,
+			);
 		};
-		B1000000000000000000000B = {
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B1000000000000000000000B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (B10000000000000000000001, B10000000000000000000019, B1000000000000000000001A);
+			files = (
+				B10000000000000000000001 /* BTMacApp.swift in Sources */,
+				B10000000000000000000019 /* MusicController.swift in Sources */,
+				B1000000000000000000001A /* PomodoroMenuBar.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B1000000000000000000000C = {
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B1000000000000000000000C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				BT_BUILD_MODE = debug;
+				BT_BUILD_SHA = unavailable;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
-		B1000000000000000000000D = {
+		B1000000000000000000000D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				SDKROOT = macosx;
+				BT_BUILD_MODE = release;
+				BT_BUILD_SHA = unavailable;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
-		B1000000000000000000000F = {
-			isa = XCConfigurationList;
-			buildConfigurations = (B1000000000000000000000C, B1000000000000000000000D);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		B10000000000000000000010 = {
-			isa = XCConfigurationList;
-			buildConfigurations = (B10000000000000000000011, B10000000000000000000012);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		B10000000000000000000011 = {
+		B10000000000000000000011 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = BTMac/BTMac.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = CUK6MYBDNQ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BTMac/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = BT;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "BT shows and controls the song playing in Music during focus sessions.";
@@ -132,18 +234,26 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
 				PRODUCT_NAME = BT;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) BT_DIAGNOSTICS";
 			};
 			name = Debug;
 		};
-		B10000000000000000000012 = {
+		B10000000000000000000012 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = BTMac/BTMac.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = CUK6MYBDNQ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BTMac/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = BT;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "BT shows and controls the song playing in Music during focus sessions.";
@@ -151,44 +261,47 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.diamondjdev.bt;
 				PRODUCT_NAME = BT;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 			};
 			name = Release;
 		};
-		B10000000000000000000014 = {
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B1000000000000000000000F /* Build configuration list for PBXProject "BT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1000000000000000000000C /* Debug */,
+				B1000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000010 /* Build configuration list for PBXNativeTarget "BTMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000011 /* Debug */,
+				B10000000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B10000000000000000000014 /* XCLocalSwiftPackageReference "BTKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = BTKit;
 		};
-		B10000000000000000000015 = {
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B10000000000000000000015 /* BTKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B10000000000000000000014;
+			package = B10000000000000000000014 /* XCLocalSwiftPackageReference "BTKit" */;
 			productName = BTKit;
 		};
-		B10000000000000000000017 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.swift;
-			path = MusicController.swift;
-			sourceTree = "<group>";
-		};
-		B10000000000000000000018 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.swift;
-			path = PomodoroMenuBar.swift;
-			sourceTree = "<group>";
-		};
-		B10000000000000000000019 = {
-			isa = PBXBuildFile;
-			fileRef = B10000000000000000000017;
-		};
-		B1000000000000000000001A = {
-			isa = PBXBuildFile;
-			fileRef = B10000000000000000000018;
-		};
-		B10000000000000000000016 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.plist.entitlements;
-			path = BTMac.entitlements;
-			sourceTree = "<group>";
-		};
+/* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = B1000000000000000000000A;
+	rootObject = B1000000000000000000000A /* Project object */;
 }

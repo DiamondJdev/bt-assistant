@@ -19,6 +19,7 @@ from bt.config import CONFIG
 from bt.gateway.chat_ws import ChatText
 from bt.gateway.chat_ws import router as chat_ws_router
 from bt.gateway.origin import OriginMiddleware
+from bt.library import get_memory
 from bt.llm.router import respond
 from bt.tools.registry import default_context
 from bt.transcript.store import Turn, get_store
@@ -31,6 +32,7 @@ STATIC = Path(__file__).parents[1] / "client"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 	CONFIG.validate_access()
+	CONFIG.validate_llm()
 	app.state.voice_busy = False
 	app.state.voice_services = None
 	if CONFIG.voice_enabled:
@@ -88,6 +90,9 @@ def health() -> dict[str, str]:
 async def ready() -> dict | JSONResponse:
 	try:
 		await asyncio.to_thread(store.list_sessions)
+		# Startup validated the OpenAI settings; remote auth is not checked here.
+		if CONFIG.llm_provider == "openai":
+			return {"status": "ready", "voice_enabled": CONFIG.voice_enabled}
 		async with httpx.AsyncClient(timeout=5) as client:
 			response = await client.get(CONFIG.ollama_url("/api/tags"))
 			response.raise_for_status()
@@ -108,12 +113,18 @@ def _unavailable(reason: str) -> JSONResponse:
 
 @app.get("/config")
 def config() -> dict[str, bool | str]:
-	return {"voice_enabled": CONFIG.voice_enabled, "model": CONFIG.ollama_model}
+	return {"voice_enabled": CONFIG.voice_enabled, "provider": CONFIG.llm_provider, "model": CONFIG.primary_model}
 
 
 @app.get("/sessions")
 async def sessions() -> list[dict]:
 	return await asyncio.to_thread(store.list_sessions)
+
+
+@app.get("/memories")
+async def memories() -> list[dict[str, str]]:
+	index = await asyncio.to_thread(get_memory().index)
+	return [{"name": m.name, "description": m.description, "type": m.type, "updated": m.updated} for m in index]
 
 
 @app.post("/sessions")

@@ -18,6 +18,7 @@ public struct ChatServerError: LocalizedError, Equatable {
 public protocol ChatAPI: Sendable {
     func sessions() async throws -> [ChatSessionSummary]
     func history(sessionID: String) async throws -> [ChatTurn]
+    func memories() async throws -> [ServerMemory]
 }
 
 public struct URLSessionChatAPI: ChatAPI {
@@ -33,6 +34,10 @@ public struct URLSessionChatAPI: ChatAPI {
 
     public func history(sessionID: String) async throws -> [ChatTurn] {
         try await get(endpoints.historyURL(sessionID: sessionID))
+    }
+
+    public func memories() async throws -> [ServerMemory] {
+        try await get(endpoints.memoriesURL)
     }
 
     private func get<T: Decodable>(_ url: URL) async throws -> T {
@@ -69,7 +74,7 @@ public final class URLSessionChatSocket: ChatSocket {
         case .data(let bytes): data = bytes
         @unknown default: return .unknown
         }
-        return try ChatJSON.decoder.decode(ServerFrame.self, from: data)
+        return try BTPerformance.measure(.decode) { try ChatJSON.decoder.decode(ServerFrame.self, from: data) }
     }
 
     public func close() {

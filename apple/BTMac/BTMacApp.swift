@@ -11,7 +11,7 @@ struct BTMacApp: App {
     private let container: ModelContainer
     @State private var pomodoro: PomodoroModule
     @State private var clock: PomodoroClock
-    @State private var sidebar: ToolSidebarModel
+    @State private var store: AppStore
     @State private var hotkey = GlobalHotkey()
 
     init() {
@@ -20,23 +20,59 @@ struct BTMacApp: App {
         } catch {
             fatalError("Could not open the BT data store: \(error)")
         }
-        let pomodoro = PomodoroModule(modelContext: container.mainContext, nowPlaying: MusicController())
+        let music = MusicController()
+        let pomodoro = PomodoroModule(modelContext: container.mainContext, nowPlaying: music)
         _pomodoro = State(initialValue: pomodoro)
         _clock = State(initialValue: PomodoroClock(pomodoro: pomodoro))
-        _sidebar = State(initialValue: ToolSidebarModel(modules: [BTModule(chat: ChatModel()), pomodoro, CalendarModule()]))
+        let coding = CodingModule(modelContext: container.mainContext)
+        coding.startWatching()
+        let chat = ChatModel()
+        #if BT_DIAGNOSTICS
+        chat.enableDiagnostics()
+        #endif
+        let calendar = CalendarModule()
+        // The screens and BT's tools share these modules, so a change from either shows in both.
+        chat.modules = [BTModule(chat: chat), pomodoro, calendar, coding]
+        let store = AppStore(
+            nowPlaying: music, chat: chat, calendarSource: calendar.store, pomodoro: pomodoro, codeSource: coding,
+            savedPlans: .standard
+        )
+        chat.modules.append(RoadmapModule(store: store))
+        _store = State(initialValue: store)
     }
 
     var body: some Scene {
         Window("BT", id: "main") {
-            ToolSidebar(model: sidebar)
-                .frame(minWidth: 640, minHeight: 400)
+            BTAppView(store: store)
+                .task {
+                    (store.calendarSource as? CalendarStore)?.refreshAccess()
+                    if let calendar = store.calendarSource as? CalendarStore, calendar.access == .notDetermined {
+                        await calendar.requestAccess()
+                    }
+                    store.tick()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    (store.calendarSource as? CalendarStore)?.refreshAccess()
+                    store.tick()
+                }
         }
-        .defaultSize(width: 960, height: 640)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1440, height: 900)
+        #if BT_DIAGNOSTICS
+        .commands { DiagnosticsCommands() }
+        #endif
+
+        #if BT_DIAGNOSTICS
+        Window("BT Diagnostics", id: DiagnosticsView.windowID) {
+            DiagnosticsView(serverAddress: store.chat?.serverAddress ?? "")
+        }
+        .defaultSize(width: 900, height: 700)
+        #endif
 
         MenuBarExtra {
             PomodoroMenu(pomodoro: pomodoro)
         } label: {
-            PomodoroMenuBarLabel(pomodoro: pomodoro, clock: clock, sidebar: sidebar, hotkey: hotkey)
+            PomodoroMenuBarLabel(pomodoro: pomodoro, clock: clock, store: store, hotkey: hotkey)
         }
 
         Settings {

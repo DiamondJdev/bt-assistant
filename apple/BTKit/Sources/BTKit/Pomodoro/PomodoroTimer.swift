@@ -92,6 +92,16 @@ public struct PomodoroState: Codable, Equatable, Sendable {
         return next
     }
 
+    /// Adds time to a running or paused phase; an idle timer is unchanged.
+    public func extended(by seconds: TimeInterval) -> PomodoroState {
+        guard isRunning || isPaused else { return self }
+        var next = self
+        next.phaseDuration += seconds
+        next.endsAt = endsAt.map { $0 + seconds }
+        next.pausedRemaining = pausedRemaining.map { $0 + seconds }
+        return next
+    }
+
     /// The phase reached `endsAt`: log the full work phase and wait at the next phase.
     public func completed(durations: PomodoroDurations) -> (PomodoroState, FocusInterval?) {
         guard let startedAt, isRunning || isPaused else { return (self, nil) }
@@ -108,6 +118,14 @@ public struct PomodoroState: Codable, Equatable, Sendable {
 
     public func stopped(at date: Date) -> (PomodoroState, FocusInterval?) {
         (.idle, partialWork(at: date))
+    }
+
+    /// Ends any active phase and waits at `phase`, keeping the work-phase count toward the long break.
+    public func switched(to phase: PomodoroPhase, at date: Date) -> (PomodoroState, FocusInterval?) {
+        var next = PomodoroState.idle
+        next.phase = phase
+        next.completedWorkPhases = completedWorkPhases
+        return (next, partialWork(at: date))
     }
 
     private func partialWork(at date: Date) -> FocusInterval? {

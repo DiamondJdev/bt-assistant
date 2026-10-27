@@ -67,3 +67,36 @@ def test_stream_complete_reassembles_tool_calls_and_forwards_text():
 def test_stream_complete_raises_on_no_chunks():
     with pytest.raises(ValueError):
         asyncio.run(stream_complete(_provider([]), []))
+
+
+def test_diagnostics_preserve_usage_only_final_chunk():
+    from bt.llm.telemetry import TurnMetrics
+    seen = []
+    provider = _provider([
+        _chunk('<think>private</think>Hello'),
+        SimpleNamespace(choices=[], usage=SimpleNamespace(prompt_tokens=12, completion_tokens=4)),
+    ], seen)
+    turn = TurnMetrics('turn')
+    call = turn.start_call(provider)
+    asyncio.run(stream_complete(provider, [], metrics=call))
+    call.finish('completed')
+    summary = turn.snapshot()['calls'][0]
+    assert seen[0]['stream_options'] == {'include_usage': True}
+    assert summary['prompt_tokens'] == 12 and summary['completion_tokens'] == 4
+    assert summary['first_output_ms'] >= 0
+    assert summary['first_visible_text_ms'] >= summary['first_output_ms']
+    assert summary['throughput_source'] == 'observed'
+    assert 'private' not in str(summary)
+
+
+def test_missing_usage_is_not_estimated_and_old_requests_are_unchanged():
+    from bt.llm.telemetry import TurnMetrics
+    seen = []
+    provider = _provider([_chunk('Hello')], seen)
+    call = TurnMetrics('turn').start_call(provider)
+    asyncio.run(stream_complete(provider, [], metrics=call))
+    call.finish('completed')
+    assert 'completion_tokens' not in call.snapshot()
+    assert 'tokens_per_second' not in call.snapshot()
+    asyncio.run(stream_complete(provider, []))
+    assert 'stream_options' not in seen[-1]

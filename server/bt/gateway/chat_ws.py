@@ -7,13 +7,16 @@ import json
 import logging
 import re
 from contextlib import ExitStack, suppress
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Query, WebSocket
 from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, ValidationError
 
 from bt.config import CONFIG
 from bt.llm.router import respond
+from bt.llm.telemetry import TurnMetrics
 from bt.tools.registry import default_context, openai_tools
 from bt.transcript.store import get_store
 
@@ -21,7 +24,8 @@ log = logging.getLogger("bt.gateway")
 router = APIRouter()
 store = get_store()
 
-CLIENT_TOOL_TIMEOUT_SECS = 30.0
+CLIENT_TOOL_TIMEOUT_SECS = 120.0
+CLIENT_TOOL_EXECUTION_TIMEOUT_SECS = 120.0
 MAX_CONTEXT_CHARS = 4000
 TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -34,6 +38,10 @@ def _not_blank(value: str) -> str:
 	if not value.strip():
 		raise ValueError("Enter a message")
 	return value
+
+
+def _uuid(value: str) -> str:
+	return str(UUID(value))
 
 
 # Shared with POST /chat so both paths accept the same text.
@@ -55,6 +63,9 @@ class Message(BaseModel):
 	type: Literal["message"]
 	text: ChatText
 	context: str | None = Field(default=None, max_length=MAX_CONTEXT_CHARS)
+	# Opt-in timing and token counts for developer builds; never carries message text.
+	diagnostics: bool = False
+	turn_id: Annotated[str, Field(max_length=36), AfterValidator(_uuid)] | None = None
 
 
 class ToolResult(BaseModel):
@@ -64,7 +75,12 @@ class ToolResult(BaseModel):
 	content: str = ""
 
 
-Frame = TypeAdapter(Annotated[Hello | Message | ToolResult, Field(discriminator="type")])
+class ToolApproval(BaseModel):
+	type: Literal["tool_approval"]
+	id: str
+
+
+Frame = TypeAdapter(Annotated[Hello | Message | ToolResult | ToolApproval, Field(discriminator="type")])
 
 
 def _frame_error(exc: ValidationError) -> str:
@@ -75,6 +91,8 @@ def _frame_error(exc: ValidationError) -> str:
 		return "Message is too long." if too_long else "Enter a message"
 	if where == ("message", "context") and too_long:
 		return "Context is too long."
+	if where == ("message", "turn_id"):
+		return "Turn id must be a UUID."
 	if where[:1] == ("hello",):
 		return "Tools were rejected: the tool list is malformed."
 	return UNRECOGNIZED
@@ -95,13 +113,20 @@ def _tools_problem(tools: list[ClientTool]) -> str | None:
 	return None
 
 
+@dataclass
+class _PendingTool:
+	waiter: asyncio.Future[ToolResult]
+	deadline: asyncio.Timeout
+	approved: bool = False
+
+
 class _Connection:
 	def __init__(self, ws: WebSocket, session_id: str):
 		self.ws = ws
 		self.session_id = session_id
 		self.client_tools: list[dict[str, Any]] | None = None
 		self.turn: asyncio.Task | None = None
-		self.pending: dict[str, asyncio.Future[ToolResult]] = {}
+		self.pending: dict[str, _PendingTool] = {}
 
 	async def error(self, message: str) -> None:
 		await self.ws.send_json({"type": "error", "message": message})
@@ -125,11 +150,23 @@ class _Connection:
 				await self.error("Wait for the current reply.")
 				return
 			self.turn = asyncio.create_task(self.run_turn(frame))
+		elif isinstance(frame, ToolApproval):
+			pending = self.pending.get(frame.id)
+			now = asyncio.get_running_loop().time()
+			live = (pending is not None and not pending.waiter.done()
+				and not pending.deadline.expired() and now < pending.deadline.when())
+			if live and not pending.approved:
+				pending.deadline.reschedule(now + CLIENT_TOOL_EXECUTION_TIMEOUT_SECS)
+				pending.approved = True
+			await self.ws.send_json({
+				"type": "tool_approved" if live else "tool_cancelled",
+				"id": frame.id,
+			})
 		else:
 			# Results for unknown or expired calls are dropped.
-			waiter = self.pending.get(frame.id)
-			if waiter and not waiter.done():
-				waiter.set_result(frame)
+			pending = self.pending.get(frame.id)
+			if pending and not pending.waiter.done():
+				pending.waiter.set_result(frame)
 
 	async def on_hello(self, hello: Hello) -> None:
 		if not CONFIG.tools_enabled:
@@ -151,17 +188,45 @@ class _Connection:
 				with suppress(Exception):
 					await self.error("Conversation not found" if isinstance(exc, KeyError) else BUSY)
 				return
+			telemetry = self.telemetry(message)
 			try:
-				await self.answer(message)
-			except Exception:
-				log.exception("chat socket turn failed for %s", self.session_id)
+				await self.answer(message, telemetry)
+			except Exception as exc:
+				if telemetry is None:
+					log.exception("chat socket turn failed for %s", self.session_id)
+					with suppress(Exception):
+						await self.error(FAILED)
+					return
+				# Diagnostics logs stay content-free: error type only.
+				telemetry.finish("error")
+				log.error("chat socket turn failed turn_id=%s error_type=%s", telemetry.turn_id, type(exc).__name__)
 				with suppress(Exception):
-					await self.error(FAILED)
+					await self.ws.send_json({
+						"type": "error", "message": FAILED,
+						"turn_id": telemetry.turn_id, "metrics": telemetry.snapshot(),
+					})
+			except asyncio.CancelledError:
+				if telemetry:
+					telemetry.finish("cancelled")
+				raise
 
-	async def answer(self, message: Message) -> None:
+	def telemetry(self, message: Message) -> TurnMetrics | None:
+		if not message.diagnostics:
+			return None
+		turn_id = message.turn_id or str(uuid4())
+
+		async def publish(metrics: dict[str, Any]) -> None:
+			await self.ws.send_json({"type": "metrics", "turn_id": turn_id, "metrics": metrics})
+
+		return TurnMetrics(turn_id, on_update=publish)
+
+	async def answer(self, message: Message, telemetry: TurnMetrics | None = None) -> None:
 		sid = self.session_id
 		await asyncio.to_thread(store.add_turn, sid, "user", message.text, input_mode="text", context=message.context)
 		history = await asyncio.to_thread(store.as_chat_messages, sid)
+		if telemetry:
+			telemetry.history_turns = len(history)
+			telemetry.context_chars = len(message.context or "")
 		ctx = default_context(sid, "text") if CONFIG.tools_enabled else None
 
 		async def delta(text: str) -> None:
@@ -176,16 +241,21 @@ class _Connection:
 			on_delta=delta,
 			client_tools=self.client_tools,
 			call_client=self.call_client,
+			telemetry=telemetry,
 		)
 		if not result:
 			raise ValueError("LLM did not return a response")
 		await asyncio.to_thread(store.add_turn, sid, "bt", result.text, compute=result.compute)
-		await self.ws.send_json({
+		done = {
 			"type": "done",
 			"text": result.text,
 			"compute": result.compute,
 			"tools_used": list(result.tools_used),
-		})
+		}
+		if telemetry:
+			telemetry.finish("completed")
+			done |= {"turn_id": telemetry.turn_id, "metrics": telemetry.snapshot()}
+		await self.ws.send_json(done)
 
 	# Asks the app to run one of its tools and returns prose for the model.
 	async def call_client(self, call_id: str, name: str, raw_arguments: str | None) -> str:
@@ -194,20 +264,24 @@ class _Connection:
 		except json.JSONDecodeError:
 			args = {}
 		waiter: asyncio.Future[ToolResult] = asyncio.get_running_loop().create_future()
-		self.pending[call_id] = waiter
 		try:
-			await self.ws.send_json({
-				"type": "tool_call",
-				"id": call_id,
-				"name": name,
-				"args": args if isinstance(args, dict) else {},
-			})
-			result = await asyncio.wait_for(waiter, CLIENT_TOOL_TIMEOUT_SECS)
+			async with asyncio.timeout(CLIENT_TOOL_TIMEOUT_SECS) as deadline:
+				self.pending[call_id] = _PendingTool(waiter, deadline)
+				await self.ws.send_json({
+					"type": "tool_call",
+					"id": call_id,
+					"name": name,
+					"args": args if isinstance(args, dict) else {},
+				})
+				result = await waiter
 		except TimeoutError:
 			log.warning("client tool %s timed out", name)
+			await self.ws.send_json({"type": "tool_cancelled", "id": call_id})
 			return f"The app did not answer {name} in time."
 		finally:
 			self.pending.pop(call_id, None)
+			if not waiter.done():
+				waiter.cancel()
 		return result.content if result.ok else f"{name} failed: {result.content}"
 
 

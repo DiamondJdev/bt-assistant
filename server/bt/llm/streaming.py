@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
 	from bt.llm.router import Provider
+	from bt.llm.telemetry import CallMetrics
 
 MAX_TOKENS = 2048
 _OPEN, _CLOSE = "<think>", "</think>"
@@ -84,9 +85,11 @@ async def stream_complete(
 	tools: list[dict[str, Any]] | None = None,
 	tool_choice: str | None = None,
 	on_text: Callable[[str], Awaitable[None]] | None = None,
+	metrics: CallMetrics | None = None,
 ) -> SimpleNamespace:
+	extra = {"stream_options": {"include_usage": True}} if metrics else {}
 	stream = await provider.client.chat.completions.create(
-		**completion_kwargs(provider, messages, tools, tool_choice), stream=True
+		**completion_kwargs(provider, messages, tools, tool_choice), stream=True, **extra
 	)
 	think = ThinkFilter()
 	parts: list[str] = []
@@ -95,14 +98,22 @@ async def stream_complete(
 	got_choice = False
 
 	async for chunk in stream:
+		if metrics:
+			metrics.usage(getattr(chunk, "usage", None))
 		if not chunk.choices:
 			continue
 		got_choice = True
 		delta = chunk.choices[0].delta
+		if metrics and (delta.content or delta.tool_calls or getattr(delta, "reasoning_content", None)):
+			metrics.output()
 		if delta.content:
 			parts.append(delta.content)
-			if on_text and (text := think.feed(delta.content)):
-				await on_text(text)
+			if on_text or metrics:
+				if text := think.feed(delta.content):
+					if metrics:
+						metrics.visible()
+					if on_text:
+						await on_text(text)
 		for piece in delta.tool_calls or ():
 			entry = by_index.get(piece.index)
 			# Some servers send each whole call at index 0; a new id means a new call.
@@ -117,8 +128,11 @@ async def stream_complete(
 
 	if not got_choice:
 		raise ValueError(f"{provider.key} returned no choices")
-	if on_text and (text := think.flush()):
-		await on_text(text)
+	if (on_text or metrics) and (text := think.flush()):
+		if metrics:
+			metrics.visible()
+		if on_text:
+			await on_text(text)
 	return SimpleNamespace(
 		content="".join(parts) or None,
 		tool_calls=[

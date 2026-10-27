@@ -18,3 +18,13 @@ def test_memory_search_caps_long_bodies(tmp_path):
     store.write('notes', 'Notes', 'word ' * 2000)
     result = asyncio.run(builtin.memory_search(SimpleNamespace(memory=store), 'notes'))
     assert len(result) < 2 * SEARCH_BODY_CHARS
+
+
+def test_environment_report_skips_ollama_in_openai_mode(monkeypatch):
+    from dataclasses import replace
+    async def no_probe():
+        raise AssertionError('openai mode must not probe Ollama')
+    monkeypatch.setattr(builtin, '_ollama_reachable', no_probe)
+    monkeypatch.setattr(builtin, 'CONFIG', replace(builtin.CONFIG, llm_provider='openai', openai_model='gpt-x'))
+    report = asyncio.run(builtin.environment_report(SimpleNamespace()))
+    assert 'gpt-x via OpenAI' in report and 'local model' not in report
