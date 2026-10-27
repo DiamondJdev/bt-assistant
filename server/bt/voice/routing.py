@@ -108,13 +108,15 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 		use_cloud = primary_cloud or (isinstance(user_text, str) and wants_escalation(user_text))
 
 		async def chunks():
-			providers = [self._cloud] if use_cloud else [self, self._cloud]
-			for provider in providers:
+			providers = [self._cloud, self] if use_cloud else [self, self._cloud]
+			for index, provider in enumerate(providers):
 				if provider is None:
 					raise RuntimeError("OpenAI requires OPENAI_API_KEY")
 				stream = None
 				emitted = False
 				self.compute = "ollama" if provider is self else "openai"
+				if provider is self:
+					_trim(context, MAX_HISTORY_CHARS)
 				try:
 					async with asyncio.timeout(CHUNK_TIMEOUT):
 						stream = await (
@@ -133,8 +135,9 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 					return
 				except Exception:
 					# Retrying after speech starts would repeat a partial answer.
-					if emitted or provider is not self or self._cloud is None:
+					if emitted or index == len(providers) - 1 or providers[index + 1] is None:
 						raise
+					log.warning("voice %s call failed, trying alternate provider", self.compute)
 				finally:
 					if stream is not None:
 						await stream.close()

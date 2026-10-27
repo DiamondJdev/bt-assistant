@@ -65,7 +65,7 @@ nix develop ./nix
 uv sync
 ```
 
-For Ollama mode, ensure the Ollama service is running, then pull a model. Skip this if you use OpenAI. For example:
+For Ollama mode or local fallback from OpenAI, ensure the Ollama service is running, then pull a model. For example:
 
 ```sh
 ollama pull qwen2.5:14b
@@ -178,7 +178,7 @@ Copy [server/.env.example](server/.env.example) to `server/.env`; all options ha
 
 `BT_LLM_PROVIDER` picks the model for both text and voice. It is read at startup, so restart BT after changing it. Case and surrounding spaces are ignored. If it is unset, BT uses OpenAI when `OPENAI_API_KEY` is set and Ollama when it is not, so an existing Ollama-only install keeps working after an upgrade. BT refuses to start if the value is not `openai` or `ollama`, or if OpenAI mode has no `OPENAI_API_KEY`.
 
-In OpenAI mode every turn goes to the configured OpenAI model. If OpenAI fails, the request fails; BT does not fall back to Ollama.
+In OpenAI mode every turn starts on the configured OpenAI model. If the call fails or returns an empty reply before output reaches the client, BT tries the configured Ollama model. This applies to text and voice. Ollama must be running with `BT_OLLAMA_MODEL` installed. A turn switches providers at most once; if both fail, the request fails. BT does not retry after visible text, speech, or voice tool-call output begins, and completed text tool results stay in the retry context rather than being executed again.
 
 In Ollama mode BT answers locally and escalates to OpenAI when you ask it to "think harder," "use your best model," or "escalate," or when the local response is malformed or the Ollama request fails. Escalation needs `OPENAI_API_KEY`. This mode is not a privacy mode: escalated turns still go to OpenAI.
 
