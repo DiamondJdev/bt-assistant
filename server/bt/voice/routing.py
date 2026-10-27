@@ -1,4 +1,4 @@
-"""Voice streaming on the configured provider; Ollama mode falls back to cloud before the first token."""
+"""Voice streaming with one provider switch per user turn, before output starts."""
 
 import asyncio
 import json
@@ -79,6 +79,9 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 		)
 		self.session_id = session_id
 		self.compute = "ollama"
+		self._user_message = object()
+		self._attempted_providers: set[str] = set()
+		self._turn_output_started = False
 		self._cloud = (
 			CloudLLMService(
 				api_key=CONFIG.openai_api_key,
@@ -101,20 +104,26 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 				service.turn_note = note
 
 	async def get_chat_completions(self, context: LLMContext) -> AsyncIterator:
-		user_text = next((m.get("content", "") for m in reversed(context.get_messages()) if m.get("role") == "user"), "")
+		user_message = next((m for m in reversed(context.get_messages()) if m.get("role") == "user"), None)
+		if user_message is not self._user_message:
+			self._user_message = user_message
+			self._attempted_providers.clear()
+			self._turn_output_started = False
+			user_text = user_message.get("content", "") if user_message else ""
+			use_cloud = CONFIG.llm_provider == "openai" or (isinstance(user_text, str) and wants_escalation(user_text))
+			self.compute = "openai" if use_cloud else "ollama"
 		self._refresh_prompt(context)
-		primary_cloud = CONFIG.llm_provider == "openai"
-		_trim(context, CLOUD_HISTORY_CHARS if primary_cloud else MAX_HISTORY_CHARS)
-		use_cloud = primary_cloud or (isinstance(user_text, str) and wants_escalation(user_text))
+		_trim(context, CLOUD_HISTORY_CHARS if self.compute == "openai" else MAX_HISTORY_CHARS)
 
 		async def chunks():
-			providers = [self._cloud, self] if use_cloud else [self, self._cloud]
+			providers = [self._cloud, self] if self.compute == "openai" else [self, self._cloud]
 			for index, provider in enumerate(providers):
 				if provider is None:
 					raise RuntimeError("OpenAI requires OPENAI_API_KEY")
 				stream = None
 				emitted = False
 				self.compute = "ollama" if provider is self else "openai"
+				self._attempted_providers.add(self.compute)
 				if provider is self:
 					_trim(context, MAX_HISTORY_CHARS)
 				try:
@@ -127,6 +136,7 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 						# A tool call is a valid reply even with no text.
 						if delta and (delta.content or getattr(delta, "tool_calls", None)):
 							emitted = True
+							self._turn_output_started = True
 						if chunk.choices and getattr(chunk.choices[0], "finish_reason", None):
 							log.info("voice reply ended: finish_reason=%s", chunk.choices[0].finish_reason)
 						yield chunk
@@ -135,7 +145,7 @@ class RoutedLLMService(_TurnNoted, OLLamaLLMService):
 					return
 				except Exception:
 					# Retrying after speech starts would repeat a partial answer.
-					if emitted or index == len(providers) - 1 or providers[index + 1] is None:
+					if self._turn_output_started or len(self._attempted_providers) > 1 or index == len(providers) - 1 or providers[index + 1] is None:
 						raise
 					log.warning("voice %s call failed, trying alternate provider", self.compute)
 				finally:

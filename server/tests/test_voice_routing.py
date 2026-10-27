@@ -268,6 +268,51 @@ def test_voice_does_not_retry_after_cloud_tool_output(monkeypatch):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('fallback_first', [False, True])
+def test_voice_tool_continuations_keep_turn_routing(monkeypatch, fallback_first):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]))])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+        seen = []
+        local_replies = [ToolStream([]), Stream(['local continuation'])]
+        cloud_replies = [Stream([], RuntimeError('cloud down'))] if fallback_first else [ToolStream([]), Stream([], RuntimeError('cloud down'))]
+        async def local_stream(self, context):
+            seen.append('ollama')
+            return local_replies.pop(0)
+        async def cloud_stream(self, context):
+            seen.append('openai')
+            return cloud_replies.pop(0)
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
+        monkeypatch.setattr(OpenAILLMService, 'get_chat_completions', cloud_stream)
+        monkeypatch.setattr(routing, 'CONFIG', replace(routing.CONFIG, llm_provider='openai', openai_api_key='test'))
+        service = routing.RoutedLLMService()
+        context = LLMContext(messages=[{'role': 'user', 'content': 'hello'}])
+        stream = await service.get_chat_completions(context)
+        assert [chunk async for chunk in stream] == [call]
+        context.add_messages([
+            {'role': 'assistant', 'tool_calls': [{'id': 'c1', 'type': 'function', 'function': {'name': 'check', 'arguments': '{}'}}]},
+            {'role': 'tool', 'tool_call_id': 'c1', 'content': 'done'},
+        ])
+        stream = await service.get_chat_completions(context)
+        if fallback_first:
+            assert [chunk.choices[0].delta.content async for chunk in stream] == ['local continuation']
+            assert seen == ['openai', 'ollama', 'ollama']
+            assert context.get_messages()[-1]['content'] == 'done'
+        else:
+            with pytest.raises(RuntimeError, match='cloud down'):
+                await anext(stream)
+            assert seen == ['openai', 'openai']
+        cloud_replies.append(Stream(['new cloud turn']))
+        context.add_message({'role': 'user', 'content': 'hello'})
+        stream = await service.get_chat_completions(context)
+        assert [chunk.choices[0].delta.content async for chunk in stream] == ['new cloud turn']
+        assert service.compute == 'openai'
+        await service.cleanup()
+    asyncio.run(run())
+
+
 def test_voice_openai_mode_tool_call_only_reply_is_not_empty(monkeypatch):
     async def run():
         call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]), finish_reason='tool_calls')])
