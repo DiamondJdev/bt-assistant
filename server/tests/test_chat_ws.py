@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 
 import pytest
@@ -305,6 +306,79 @@ def test_live_client_tool_approval_is_acknowledged(client, monkeypatch):
         assert ws.receive_json() == {'type': 'tool_approved', 'id': 'c1'}
         ws.send_json({'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Approved'})
         assert ws.receive_json()['text'] == 'Approved'
+
+
+def test_approved_tool_survives_original_deadline_during_acknowledgement(monkeypatch):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_TIMEOUT_SECS', 0.01)
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_EXECUTION_TIMEOUT_SECS', 1.0, raising=False)
+
+    async def scenario():
+        frames = asyncio.Queue()
+
+        class Socket:
+            async def send_json(self, frame):
+                await frames.put(frame)
+                if frame['type'] == 'tool_approved':
+                    await asyncio.sleep(0.05)
+
+        connection = chat_ws._Connection(Socket(), 'test')
+        task = asyncio.create_task(connection.call_client('c1', 'calendar_add_event', '{}'))
+        try:
+            assert (await frames.get())['type'] == 'tool_call'
+            await connection.on_frame(json.dumps({'type': 'tool_approval', 'id': 'c1'}))
+            assert await frames.get() == {'type': 'tool_approved', 'id': 'c1'}
+            await connection.on_frame(json.dumps({
+                'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Saved',
+            }))
+            assert await task == 'Saved'
+            assert frames.empty()
+            assert not connection.pending
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('complete', [True, False])
+def test_duplicate_approval_preserves_execution_deadline(monkeypatch, complete):
+    monkeypatch.setattr(chat_ws, 'CLIENT_TOOL_EXECUTION_TIMEOUT_SECS', 0.05)
+
+    async def scenario():
+        frames = []
+
+        class Socket:
+            async def send_json(self, frame):
+                frames.append(frame)
+
+        connection = chat_ws._Connection(Socket(), 'test')
+        task = asyncio.create_task(connection.call_client('c1', 'calendar_add_event', '{}'))
+        try:
+            await asyncio.sleep(0)
+            approval = json.dumps({'type': 'tool_approval', 'id': 'c1'})
+            await connection.on_frame(approval)
+            pending = connection.pending['c1']
+            deadline = pending.deadline.when()
+            await connection.on_frame(approval)
+            assert connection.pending['c1'] is pending
+            assert pending.deadline.when() == deadline
+            assert frames[-2:] == [{'type': 'tool_approved', 'id': 'c1'}] * 2
+            if complete:
+                await connection.on_frame(json.dumps({
+                    'type': 'tool_result', 'id': 'c1', 'ok': True, 'content': 'Saved',
+                }))
+                assert await task == 'Saved'
+            else:
+                assert await task == 'The app did not answer calendar_add_event in time.'
+                assert frames[-1] == {'type': 'tool_cancelled', 'id': 'c1'}
+                await connection.on_frame(approval)
+                assert frames[-1] == {'type': 'tool_cancelled', 'id': 'c1'}
+            assert not connection.pending
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
 
 
 def test_late_approval_is_rejected_while_followup_is_streaming(client, monkeypatch):

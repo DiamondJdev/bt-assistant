@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from contextlib import ExitStack, suppress
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
@@ -24,6 +25,7 @@ router = APIRouter()
 store = get_store()
 
 CLIENT_TOOL_TIMEOUT_SECS = 120.0
+CLIENT_TOOL_EXECUTION_TIMEOUT_SECS = 120.0
 MAX_CONTEXT_CHARS = 4000
 TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -111,13 +113,20 @@ def _tools_problem(tools: list[ClientTool]) -> str | None:
 	return None
 
 
+@dataclass
+class _PendingTool:
+	waiter: asyncio.Future[ToolResult]
+	deadline: asyncio.Timeout
+	approved: bool = False
+
+
 class _Connection:
 	def __init__(self, ws: WebSocket, session_id: str):
 		self.ws = ws
 		self.session_id = session_id
 		self.client_tools: list[dict[str, Any]] | None = None
 		self.turn: asyncio.Task | None = None
-		self.pending: dict[str, asyncio.Future[ToolResult]] = {}
+		self.pending: dict[str, _PendingTool] = {}
 
 	async def error(self, message: str) -> None:
 		await self.ws.send_json({"type": "error", "message": message})
@@ -142,16 +151,22 @@ class _Connection:
 				return
 			self.turn = asyncio.create_task(self.run_turn(frame))
 		elif isinstance(frame, ToolApproval):
-			waiter = self.pending.get(frame.id)
+			pending = self.pending.get(frame.id)
+			now = asyncio.get_running_loop().time()
+			live = (pending is not None and not pending.waiter.done()
+				and not pending.deadline.expired() and now < pending.deadline.when())
+			if live and not pending.approved:
+				pending.deadline.reschedule(now + CLIENT_TOOL_EXECUTION_TIMEOUT_SECS)
+				pending.approved = True
 			await self.ws.send_json({
-				"type": "tool_approved" if waiter is not None and not waiter.done() else "tool_cancelled",
+				"type": "tool_approved" if live else "tool_cancelled",
 				"id": frame.id,
 			})
 		else:
 			# Results for unknown or expired calls are dropped.
-			waiter = self.pending.get(frame.id)
-			if waiter and not waiter.done():
-				waiter.set_result(frame)
+			pending = self.pending.get(frame.id)
+			if pending and not pending.waiter.done():
+				pending.waiter.set_result(frame)
 
 	async def on_hello(self, hello: Hello) -> None:
 		if not CONFIG.tools_enabled:
@@ -249,21 +264,24 @@ class _Connection:
 		except json.JSONDecodeError:
 			args = {}
 		waiter: asyncio.Future[ToolResult] = asyncio.get_running_loop().create_future()
-		self.pending[call_id] = waiter
 		try:
-			await self.ws.send_json({
-				"type": "tool_call",
-				"id": call_id,
-				"name": name,
-				"args": args if isinstance(args, dict) else {},
-			})
-			result = await asyncio.wait_for(waiter, CLIENT_TOOL_TIMEOUT_SECS)
+			async with asyncio.timeout(CLIENT_TOOL_TIMEOUT_SECS) as deadline:
+				self.pending[call_id] = _PendingTool(waiter, deadline)
+				await self.ws.send_json({
+					"type": "tool_call",
+					"id": call_id,
+					"name": name,
+					"args": args if isinstance(args, dict) else {},
+				})
+				result = await waiter
 		except TimeoutError:
 			log.warning("client tool %s timed out", name)
 			await self.ws.send_json({"type": "tool_cancelled", "id": call_id})
 			return f"The app did not answer {name} in time."
 		finally:
 			self.pending.pop(call_id, None)
+			if not waiter.done():
+				waiter.cancel()
 		return result.content if result.ok else f"{name} failed: {result.content}"
 
 
