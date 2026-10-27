@@ -38,10 +38,10 @@ def test_malformed_local_reply_falls_back(body, monkeypatch):
     assert (result.text, result.compute) == ('Cloud answer', 'openai')
 
 
-def test_cloud_failure_is_not_retried(monkeypatch):
+def test_cloud_status_failure_falls_back_locally(monkeypatch):
     _install(monkeypatch, CLOUD_OK, cloud_body={'error': {'message': 'down'}}, cloud_status=500)
-    with pytest.raises(Exception):
-        asyncio.run(router.respond([], 'escalate'))
+    result = asyncio.run(router.respond([], 'escalate'))
+    assert (result.text, result.compute) == ('Cloud answer', 'ollama')
 
 
 def test_local_answer_is_available_without_cloud_key(monkeypatch):

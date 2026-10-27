@@ -1,6 +1,6 @@
 # BT
 
-BT is a voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It answers through OpenAI by default and keeps transcripts in SQLite. Set `BT_LLM_PROVIDER=ollama` to run the model locally through Ollama instead; in that mode BT escalates a turn to OpenAI when asked or when the local response fails.
+BT is a voice-native personal assistant with a personality inspired by BT-7274 from *Titanfall 2*. It answers through OpenAI by default, falls back to Ollama when an OpenAI call fails before output begins, and keeps transcripts in SQLite. Set `BT_LLM_PROVIDER=ollama` to run the model locally through Ollama instead; in that mode BT escalates a turn to OpenAI when asked or when the local response fails.
 
 This repository is a monorepo. `server/` holds the FastAPI server with text chat, an optional voice pipeline, and a browser client for foreground use on macOS and iOS. `apple/` holds the native macOS app shell and shared Swift package. Editor plugins (`editors/`) are planned; see [the monorepo plan](docs/superpowers/plans/2026-10-19-monorepo-and-mac-client.md). See [the design document](docs/DESIGN.md) for the architecture, routing policy, and future direction.
 
@@ -13,7 +13,7 @@ flowchart LR
     STT["Speech-to-text"]
     RequestTranscript[("Transcript<br/>Request + history")]
     OpenAI["OpenAI (default)"]
-    Ollama["Ollama local model (BT_LLM_PROVIDER=ollama)"]
+    Ollama["Ollama local model"]
     ResponseTranscript[("Transcript<br/>Stored response")]
     TTS[Text-to-speech]
 
@@ -21,6 +21,7 @@ flowchart LR
     RequestTranscript --> OpenAI
     RequestTranscript -.-> Ollama
     Ollama -.->|escalate when needed| OpenAI
+    OpenAI -.->|fallback before output begins| Ollama
     Ollama --> ResponseTranscript
     OpenAI --> ResponseTranscript
     ResponseTranscript --> TTS --> Client
@@ -31,7 +32,7 @@ flowchart LR
 The text conversational core is ready for development use. The voice pipeline is available behind an opt-in setting.
 
 - [x] Chat through OpenAI by default, or locally through Ollama
-- [x] Ollama mode with an optional OpenAI fallback
+- [x] OpenAI-to-Ollama fallback, with optional cloud escalation in Ollama mode
 - [x] SQLite-backed session transcripts
 - [x] Optional speech-to-text and text-to-speech pipeline
 - [x] Developer dashboard for live transcripts
@@ -48,7 +49,7 @@ The text conversational core is ready for development use. The voice pipeline is
 - Python 3.11 to 3.14 (`ctranslate2` has no 3.15 wheels yet; use `uv sync --python 3.14` if uv picks a newer one)
 - [uv](https://docs.astral.sh/uv/)
 - An OpenAI API key in `OPENAI_API_KEY`, for the default OpenAI mode
-- For Ollama mode only: [Ollama](https://ollama.com/) running locally and a chat model that matches `BT_OLLAMA_MODEL`
+- For Ollama mode or local fallback: [Ollama](https://ollama.com/) running locally and a chat model that matches `BT_OLLAMA_MODEL`
 
 Voice mode also needs FFmpeg, PortAudio, and Piper. The Nix development shell provides these dependencies.
 
@@ -178,7 +179,7 @@ Copy [server/.env.example](server/.env.example) to `server/.env`; all options ha
 
 `BT_LLM_PROVIDER` picks the model for both text and voice. It is read at startup, so restart BT after changing it. Case and surrounding spaces are ignored. If it is unset, BT uses OpenAI when `OPENAI_API_KEY` is set and Ollama when it is not, so an existing Ollama-only install keeps working after an upgrade. BT refuses to start if the value is not `openai` or `ollama`, or if OpenAI mode has no `OPENAI_API_KEY`.
 
-In OpenAI mode every turn starts on the configured OpenAI model. If the call fails or returns an empty reply before output reaches the client, BT tries the configured Ollama model. This applies to text and voice. Ollama must be running with `BT_OLLAMA_MODEL` installed. A turn switches providers at most once; if both fail, the request fails. BT does not retry after visible text, speech, or voice tool-call output begins, and completed text tool results stay in the retry context rather than being executed again.
+In OpenAI mode every turn starts on the configured OpenAI model. If the call fails or returns an empty reply before output reaches the client, BT tries the configured Ollama model. This applies to text and voice. Ollama must be running with `BT_OLLAMA_MODEL` installed. Each failed completion gets at most one alternate-provider attempt; if both fail, the request fails. Text turns stay on the fallback provider for subsequent tool rounds. BT does not retry failed streams after visible text or voice content/tool-call output begins. Completed text tool results stay in the retry context; fallback does not rerun those tool handlers.
 
 In Ollama mode BT answers locally and escalates to OpenAI when you ask it to "think harder," "use your best model," or "escalate," or when the local response is malformed or the Ollama request fails. Escalation needs `OPENAI_API_KEY`. This mode is not a privacy mode: escalated turns still go to OpenAI.
 

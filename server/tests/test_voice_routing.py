@@ -249,6 +249,25 @@ def test_voice_fallback_failure_does_not_cycle(monkeypatch):
     asyncio.run(run())
 
 
+def test_voice_does_not_retry_after_cloud_tool_output(monkeypatch):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]))])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+                raise RuntimeError('cloud down')
+        cloud = ToolStream([])
+        local_calls = _openai_mode(monkeypatch, cloud)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        assert await anext(stream) == call
+        with pytest.raises(RuntimeError, match='cloud down'):
+            await anext(stream)
+        assert not local_calls and cloud.closed
+        await service.cleanup()
+    asyncio.run(run())
+
+
 def test_voice_openai_mode_tool_call_only_reply_is_not_empty(monkeypatch):
     async def run():
         call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]), finish_reason='tool_calls')])

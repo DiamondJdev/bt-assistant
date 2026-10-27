@@ -59,7 +59,7 @@ def providers(monkeypatch):
     monkeypatch.setattr(router, '_PROVIDERS', {})
     calls = []
     def install(**replies):
-        async def complete(provider, messages, tools=None):
+        async def complete(provider, messages, tools=None, metrics=None):
             calls.append((provider.key, list(messages)))
             reply = replies[provider.key].pop(0)
             if isinstance(reply, Exception):
@@ -302,6 +302,7 @@ def test_openai_default_dispatches_server_and_client_tools(openai_mode, monkeypa
 @pytest.mark.parametrize('failure', [
     openai.APIConnectionError(request=_REQUEST),
     openai.BadRequestError('bad request', response=httpx.Response(400, request=_REQUEST), body=None),
+    TimeoutError('provider timed out'),
     _reply(''),
 ])
 def test_openai_default_errors_fall_back_locally(openai_mode, failure):
@@ -316,6 +317,24 @@ def test_fallback_failure_does_not_cycle(openai_mode):
     with pytest.raises(ValueError, match='local down'):
         asyncio.run(router.respond([], 'hello'))
     assert [key for key, _ in calls] == ['openai', 'ollama']
+
+
+def test_failed_local_to_cloud_escalation_does_not_cycle(providers):
+    calls = providers(ollama=[ValueError('local down')], openai=[ValueError('cloud down')])
+    with pytest.raises(ValueError, match='cloud down'):
+        asyncio.run(router.respond([], 'hello'))
+    assert [key for key, _ in calls] == ['ollama', 'openai']
+
+
+def test_local_fallback_telemetry_tracks_both_providers(openai_mode):
+    from bt.llm.telemetry import TurnMetrics
+    openai_mode(openai=[ValueError('cloud down')], ollama=[_reply('Local answer')])
+    turn = TurnMetrics('fallback')
+    result = asyncio.run(router.respond([], 'hello', telemetry=turn))
+    assert result.compute == 'ollama'
+    assert [(call['provider'], call['status']) for call in turn.snapshot()['calls']] == [
+        ('openai', 'error'), ('ollama', 'completed'),
+    ]
 
 
 def test_local_fallback_keeps_completed_tool_results(openai_mode, monkeypatch):
