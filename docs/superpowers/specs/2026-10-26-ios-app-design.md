@@ -218,4 +218,4 @@ If any of 1 to 3 fail with a free account, stop and revisit the trigger or alarm
 - Silence threshold for end of turn.
 - Where to-do and reminder tables live (transcript database or a new file) and the sync endpoint shape (for example `GET /reminders?since=<updated_at>`).
 - The exact phone layout within the Sand Grid tokens.
-- How Snooze from a notification action reaches the server (background URLSession from the notification action is expected to work). Snooze length defaults to one hour.
+- How Snooze from a notification action reaches the server (background URLSession from the notification action is expected to work). Snooze length defaults to 5 minutes.
