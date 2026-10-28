@@ -27,6 +27,8 @@ def completion_kwargs(
 			kwargs["tool_choice"] = tool_choice
 	if provider.key == "openai":
 		kwargs["max_completion_tokens"] = MAX_TOKENS
+		if tools and provider.model == "gpt-5.6-luna":
+			kwargs["reasoning_effort"] = "none"
 	else:
 		kwargs["max_tokens"] = MAX_TOKENS
 	return kwargs

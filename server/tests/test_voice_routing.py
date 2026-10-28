@@ -22,6 +22,23 @@ class Stream:
         self.closed = True
 
 
+@pytest.mark.parametrize('model,has_tools,expected', [
+    ('gpt-5.6-luna', True, 'none'),
+    ('gpt-5.6-luna', False, None),
+    ('gpt-4.1', True, None),
+])
+def test_voice_luna_tool_requests_disable_reasoning(model, has_tools, expected):
+    async def run():
+        service = routing.CloudLLMService(api_key='test', settings=OpenAILLMService.Settings(model=model))
+        tools = [{'type': 'function', 'function': {'name': 'check'}}] if has_tools else []
+        params = service.build_chat_completion_params({'messages': [], 'tools': tools})
+        assert params.get('reasoning_effort') == expected
+        if expected is None:
+            assert 'reasoning_effort' not in params
+        await service.cleanup()
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('prompt,broken,want', [('hello',False,'local'),('escalate',False,'cloud'),('hello',True,'cloud')])
 def test_voice_stream_routes_and_closes_providers(prompt, broken, want, monkeypatch):
     async def run():
@@ -181,10 +198,9 @@ def test_voice_openai_mode_starts_on_cloud_without_ollama(monkeypatch):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('texts', [[], ['partial']])
-def test_voice_openai_mode_propagates_cloud_errors_without_retry(texts, monkeypatch):
+def test_voice_openai_mode_propagates_partial_cloud_errors(monkeypatch):
     async def run():
-        cloud = Stream(texts, RuntimeError('cloud down'))
+        cloud = Stream(['partial'], RuntimeError('cloud down'))
         local_calls = _openai_mode(monkeypatch, cloud)
         service = routing.RoutedLLMService()
         stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
@@ -192,10 +208,107 @@ def test_voice_openai_mode_propagates_cloud_errors_without_retry(texts, monkeypa
         with pytest.raises(RuntimeError, match='cloud down'):
             async for chunk in stream:
                 seen.append(chunk.choices[0].delta.content)
-        assert seen == texts
+        assert seen == ['partial']
         assert local_calls == []
         assert service.compute == 'openai'
         assert cloud.closed
+        await service.cleanup()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('failure', [None, RuntimeError('cloud down')])
+def test_voice_cloud_failure_falls_back_with_local_history_budget(monkeypatch, failure):
+    async def run():
+        cloud = Stream([], failure)
+        local_calls = _openai_mode(monkeypatch, cloud)
+        service = routing.RoutedLLMService()
+        messages = [{'role': 'user' if i % 2 == 0 else 'assistant', 'content': 'x' * 1000} for i in range(40)]
+        stream = await service.get_chat_completions(LLMContext(messages=messages))
+        assert [chunk.choices[0].delta.content async for chunk in stream] == ['local']
+        assert service.compute == 'ollama' and cloud.closed
+        assert len(local_calls) == 1
+        assert len(local_calls[0].get_messages()) < 40
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_fallback_failure_does_not_cycle(monkeypatch):
+    async def run():
+        cloud = Stream([], RuntimeError('cloud down'))
+        _openai_mode(monkeypatch, cloud)
+        local = Stream([], RuntimeError('local down'))
+        async def local_stream(self, context):
+            return local
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        with pytest.raises(RuntimeError, match='local down'):
+            await anext(stream)
+        assert cloud.closed and local.closed
+        await service.cleanup()
+    asyncio.run(run())
+
+
+def test_voice_does_not_retry_after_cloud_tool_output(monkeypatch):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]))])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+                raise RuntimeError('cloud down')
+        cloud = ToolStream([])
+        local_calls = _openai_mode(monkeypatch, cloud)
+        service = routing.RoutedLLMService()
+        stream = await service.get_chat_completions(LLMContext(messages=[{'role': 'user', 'content': 'hello'}]))
+        assert await anext(stream) == call
+        with pytest.raises(RuntimeError, match='cloud down'):
+            await anext(stream)
+        assert not local_calls and cloud.closed
+        await service.cleanup()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('fallback_first', [False, True])
+def test_voice_tool_continuations_keep_turn_routing(monkeypatch, fallback_first):
+    async def run():
+        call = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None, tool_calls=[object()]))])
+        class ToolStream(Stream):
+            async def __aiter__(self):
+                yield call
+        seen = []
+        local_replies = [ToolStream([]), Stream(['local continuation'])]
+        cloud_replies = [Stream([], RuntimeError('cloud down'))] if fallback_first else [ToolStream([]), Stream([], RuntimeError('cloud down'))]
+        async def local_stream(self, context):
+            seen.append('ollama')
+            return local_replies.pop(0)
+        async def cloud_stream(self, context):
+            seen.append('openai')
+            return cloud_replies.pop(0)
+        monkeypatch.setattr(OLLamaLLMService, 'get_chat_completions', local_stream)
+        monkeypatch.setattr(OpenAILLMService, 'get_chat_completions', cloud_stream)
+        monkeypatch.setattr(routing, 'CONFIG', replace(routing.CONFIG, llm_provider='openai', openai_api_key='test'))
+        service = routing.RoutedLLMService()
+        context = LLMContext(messages=[{'role': 'user', 'content': 'hello'}])
+        stream = await service.get_chat_completions(context)
+        assert [chunk async for chunk in stream] == [call]
+        context.add_messages([
+            {'role': 'assistant', 'tool_calls': [{'id': 'c1', 'type': 'function', 'function': {'name': 'check', 'arguments': '{}'}}]},
+            {'role': 'tool', 'tool_call_id': 'c1', 'content': 'done'},
+        ])
+        stream = await service.get_chat_completions(context)
+        if fallback_first:
+            assert [chunk.choices[0].delta.content async for chunk in stream] == ['local continuation']
+            assert seen == ['openai', 'ollama', 'ollama']
+            assert context.get_messages()[-1]['content'] == 'done'
+        else:
+            with pytest.raises(RuntimeError, match='cloud down'):
+                await anext(stream)
+            assert seen == ['openai', 'openai']
+        cloud_replies.append(Stream(['new cloud turn']))
+        context.add_message({'role': 'user', 'content': 'hello'})
+        stream = await service.get_chat_completions(context)
+        assert [chunk.choices[0].delta.content async for chunk in stream] == ['new cloud turn']
+        assert service.compute == 'openai'
         await service.cleanup()
     asyncio.run(run())
 

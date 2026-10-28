@@ -1,9 +1,8 @@
 """
 Router for model providers. Currently between local Ollama and cloud OpenAI.
 
-Prefers local, escalating to cloud when the local response looks degenerate or
-upon user request. See DESIGN.md "Routing: local vs. cloud" for the policy
-in-depth.
+Uses the configured provider first, with one alternate provider on failure.
+Ollama mode also escalates degenerate replies and explicit user requests.
 """
 
 from __future__ import annotations
@@ -139,13 +138,26 @@ async def respond(
 ) -> LLMResponse | None:
 	if provider not in {None, "local", "cloud"}:
 		raise ValueError("Unknown provider")
-	# On the cloud there are no local heuristics or fallback; only an Ollama-mode escalation is logged.
 	primary_cloud = provider != "local" and CONFIG.llm_provider == "openai"
 	escalated = primary_cloud or provider == "cloud" or wants_escalation(user_text)
 	if escalated and not primary_cloud:
 		log.info("starting on the cloud model")
 
 	current = _provider("openai" if escalated else "ollama")
+	attempted = {current.key}
+	emitted = False
+
+	async def forward_delta(text: str) -> None:
+		nonlocal emitted
+		emitted = True
+		await on_delta(text)
+
+	def switch_provider(key: str) -> None:
+		nonlocal current, escalated, stream_to
+		current = _provider(key)
+		attempted.add(key)
+		escalated = True
+		stream_to = None
 	note = turn_note(recent_user_text(messages), session_id=session_id, turns=_user_turns(messages), context=context)
 	working: list[Any] = [
 		{"role": "system", "content": render_system_prompt(surface="text")},
@@ -157,7 +169,7 @@ async def respond(
 		tools = openai_tools() + list(client_tools or ())
 		client_names = {t["function"]["name"] for t in client_tools or ()}
 
-	async def complete(tool_choice: str | None = None):
+	async def request(tool_choice: str | None = None):
 		nonlocal active_call
 		active_call = telemetry.start_call(current) if telemetry else None
 		extra = {"metrics": active_call} if active_call else {}
@@ -168,6 +180,8 @@ async def respond(
 				message = await _complete(current, working, tools, **extra)
 			else:
 				message = await stream_complete(current, working, tools, tool_choice, on_text=stream_to, **extra)
+			if not message.tool_calls and not strip_thinking(message.content):
+				raise ValueError(f"{current.key} returned an empty reply")
 		except BaseException as exc:
 			if active_call:
 				active_call.finish('cancelled' if isinstance(exc, asyncio.CancelledError) else 'error')
@@ -177,24 +191,27 @@ async def respond(
 			await telemetry.publish()
 		return message
 
+	async def complete(tool_choice: str | None = None):
+		try:
+			return await request(tool_choice)
+		except (openai.APIError, ValueError, TimeoutError) as exc:
+			alternate = "ollama" if current.key == "openai" else "openai"
+			if emitted or alternate in attempted:
+				raise
+			log.warning("%s call failed (%s), falling back to %s", current.key, type(exc).__name__, alternate)
+			switch_provider(alternate)
+			return await request(tool_choice)
+
 	active_call = None
-	stream_to = on_delta
+	stream_to = forward_delta if on_delta else None
 	try:
 		for _ in range(MAX_TOOL_ITERATIONS):
-			try:
-				message = await complete()
-			except (openai.APIError, ValueError) as exc:
-				# Covers connection, timeout, status errors and malformed replies; tool turns so far are kept.
-				if escalated:
-					raise
-				log.warning("local call failed (%s), escalating to cloud", type(exc).__name__ if telemetry else exc)
-				current, escalated, stream_to = _provider("openai"), True, None
-				continue
+			message = await complete()
 
 			if not message.tool_calls or ctx is None:
-				if not escalated and _looks_degenerate(message.content, user_text):
+				if not escalated and not emitted and _looks_degenerate(message.content, user_text):
 					log.warning("local response looks degenerate, escalating to cloud")
-					current, escalated, stream_to = _provider("openai"), True, None
+					switch_provider("openai")
 					continue
 				return _result(message, current, ctx)
 

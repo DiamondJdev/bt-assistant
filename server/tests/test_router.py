@@ -59,7 +59,7 @@ def providers(monkeypatch):
     monkeypatch.setattr(router, '_PROVIDERS', {})
     calls = []
     def install(**replies):
-        async def complete(provider, messages, tools=None):
+        async def complete(provider, messages, tools=None, metrics=None):
             calls.append((provider.key, list(messages)))
             reply = replies[provider.key].pop(0)
             if isinstance(reply, Exception):
@@ -126,10 +126,10 @@ def test_tool_budget_final_call_forbids_more_tools(providers, monkeypatch):
     assert seen[-1] == ([{'type': 'function'}], 'none')
 
 
-def test_empty_cloud_reply_raises(providers):
-    providers(openai=[_reply('<think>only thoughts</think>')])
-    with pytest.raises(ValueError):
-        asyncio.run(router.respond([], 'escalate'))
+def test_empty_cloud_reply_falls_back(providers):
+    providers(openai=[_reply('<think>only thoughts</think>')], ollama=[_reply('Local answer')])
+    result = asyncio.run(router.respond([], 'escalate'))
+    assert (result.text, result.compute) == ('Local answer', 'ollama')
 
 
 SERVER_TOOLS = [{'type': 'function', 'function': {'name': 'memory_search'}}]
@@ -160,7 +160,8 @@ def test_mid_turn_escalation_stops_deltas(providers, monkeypatch):
         pass
     result = asyncio.run(router.respond([], 'hello', on_delta=on_delta))
     assert result.compute == 'openai'
-    assert seen == [('ollama', on_delta), ('openai', None)]
+    assert seen[0][0] == 'ollama' and callable(seen[0][1])
+    assert seen[1] == ('openai', None)
 
 
 def test_cloud_start_still_streams(providers, monkeypatch):
@@ -173,7 +174,7 @@ def test_cloud_start_still_streams(providers, monkeypatch):
     async def on_delta(text):
         pass
     asyncio.run(router.respond([], 'escalate this', on_delta=on_delta))
-    assert seen == [('openai', on_delta)]
+    assert len(seen) == 1 and seen[0][0] == 'openai' and callable(seen[0][1])
 
 
 def test_client_tool_calls_go_to_the_client(monkeypatch):
@@ -298,11 +299,96 @@ def test_openai_default_dispatches_server_and_client_tools(openai_mode, monkeypa
     assert [m['content'] for m in calls[-1][1][-2:]] == ['memory', 'events']
 
 
-def test_openai_default_errors_propagate_without_local_retry(openai_mode):
-    calls = openai_mode(openai=[openai.APIConnectionError(request=_REQUEST)])
-    with pytest.raises(openai.APIConnectionError):
+@pytest.mark.parametrize('failure', [
+    openai.APIConnectionError(request=_REQUEST),
+    openai.BadRequestError('bad request', response=httpx.Response(400, request=_REQUEST), body=None),
+    TimeoutError('provider timed out'),
+    _reply(''),
+])
+def test_openai_default_errors_fall_back_locally(openai_mode, failure):
+    calls = openai_mode(openai=[failure], ollama=[_reply('Local answer')])
+    result = asyncio.run(router.respond([], 'hello'))
+    assert (result.text, result.compute) == ('Local answer', 'ollama')
+    assert [key for key, _ in calls] == ['openai', 'ollama']
+
+
+def test_fallback_failure_does_not_cycle(openai_mode):
+    calls = openai_mode(openai=[ValueError('cloud down')], ollama=[ValueError('local down')])
+    with pytest.raises(ValueError, match='local down'):
         asyncio.run(router.respond([], 'hello'))
-    assert [key for key, _ in calls] == ['openai']
+    assert [key for key, _ in calls] == ['openai', 'ollama']
+
+
+def test_failed_local_to_cloud_escalation_does_not_cycle(providers):
+    calls = providers(ollama=[ValueError('local down')], openai=[ValueError('cloud down')])
+    with pytest.raises(ValueError, match='cloud down'):
+        asyncio.run(router.respond([], 'hello'))
+    assert [key for key, _ in calls] == ['ollama', 'openai']
+
+
+def test_local_fallback_telemetry_tracks_both_providers(openai_mode):
+    from bt.llm.telemetry import TurnMetrics
+    openai_mode(openai=[ValueError('cloud down')], ollama=[_reply('Local answer')])
+    turn = TurnMetrics('fallback')
+    result = asyncio.run(router.respond([], 'hello', telemetry=turn))
+    assert result.compute == 'ollama'
+    assert [(call['provider'], call['status']) for call in turn.snapshot()['calls']] == [
+        ('openai', 'error'), ('ollama', 'completed'),
+    ]
+
+
+def test_local_fallback_keeps_completed_tool_results(openai_mode, monkeypatch):
+    monkeypatch.setattr(router, 'CONFIG', replace(router.CONFIG, tools_enabled=True))
+    call = SimpleNamespace(id='c1', function=SimpleNamespace(name='memory_search', arguments='{}'))
+    executed = []
+    async def dispatch(name, arguments, ctx):
+        executed.append(name)
+        return 'Saved result'
+    monkeypatch.setattr(router, 'dispatch_call', dispatch)
+    calls = openai_mode(openai=[_reply(None, [call]), ValueError('cloud down')], ollama=[_reply('Local answer')])
+    result = asyncio.run(router.respond([], 'hello', ctx=SimpleNamespace(used=[])))
+    assert result.compute == 'ollama'
+    assert executed == ['memory_search']
+    assert calls[-1][1][-1] == {'role': 'tool', 'tool_call_id': 'c1', 'content': 'Saved result'}
+
+
+@pytest.mark.parametrize('partial', [False, True])
+def test_streaming_cloud_failure_retries_only_before_visible_output(openai_mode, monkeypatch, partial):
+    openai_mode()
+    seen, deltas = [], []
+    async def stream(provider, messages, tools=None, tool_choice=None, on_text=None):
+        seen.append(provider.key)
+        if provider.key == 'openai':
+            if partial:
+                await on_text('Partial')
+            raise openai.APIConnectionError(request=_REQUEST)
+        if on_text:
+            await on_text('Local answer')
+        return _reply('Local answer')
+    monkeypatch.setattr(router, 'stream_complete', stream)
+    async def on_delta(text):
+        deltas.append(text)
+    if partial:
+        with pytest.raises(openai.APIConnectionError):
+            asyncio.run(router.respond([], 'hello', on_delta=on_delta))
+        assert seen == ['openai'] and deltas == ['Partial']
+    else:
+        result = asyncio.run(router.respond([], 'hello', on_delta=on_delta))
+        assert result.compute == 'ollama' and seen == ['openai', 'ollama']
+
+
+def test_tool_budget_final_call_can_fall_back(openai_mode, monkeypatch):
+    monkeypatch.setattr(router, 'MAX_TOOL_ITERATIONS', 0)
+    seen = []
+    async def complete(provider, messages, tools=None, tool_choice=None):
+        seen.append((provider.key, tool_choice))
+        if provider.key == 'openai':
+            raise ValueError('cloud down')
+        return _reply('Local answer')
+    monkeypatch.setattr(router, '_complete', complete)
+    result = asyncio.run(router.respond([], 'hello'))
+    assert result.compute == 'ollama'
+    assert seen == [('openai', 'none'), ('ollama', 'none')]
 
 
 def test_openai_default_degenerate_reply_is_not_retried(openai_mode):

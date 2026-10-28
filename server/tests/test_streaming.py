@@ -3,7 +3,22 @@ from types import SimpleNamespace
 
 import pytest
 
-from bt.llm.streaming import ThinkFilter, stream_complete
+from bt.llm.streaming import ThinkFilter, completion_kwargs, stream_complete
+
+
+@pytest.mark.parametrize('key,model,has_tools,expected', [
+    ('openai', 'gpt-5.6-luna', True, 'none'),
+    ('openai', 'gpt-5.6-luna', False, None),
+    ('openai', 'gpt-4.1', True, None),
+    ('ollama', 'gpt-5.6-luna', True, None),
+])
+def test_luna_tool_requests_disable_reasoning(key, model, has_tools, expected):
+    provider = SimpleNamespace(key=key, model=model)
+    tools = [{'type': 'function', 'function': {'name': 'check'}}] if has_tools else None
+    params = completion_kwargs(provider, [], tools)
+    assert params.get('reasoning_effort') == expected
+    if expected is None:
+        assert 'reasoning_effort' not in params
 
 
 def test_think_filter_handles_split_tags():
